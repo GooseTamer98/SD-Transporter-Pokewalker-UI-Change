@@ -395,15 +395,15 @@ static void number(const uint8_t *ee,uint8_t *out,uint32_t value,int x,int y,int
 }
 /* Small plain labels only where custom app features have no uploaded label. */
 static void label(uint8_t *out,const char *text,int x,int y){
-    static const char chars[]=" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:-/!?.";
-    static const uint8_t glyph[][5]={
-      {0,0,0,0,0},{126,9,9,9,126},{127,73,73,73,54},{62,65,65,65,34},{127,65,65,34,28},{127,73,73,73,65},{127,9,9,9,1},{62,65,73,73,122},{127,8,8,8,127},{65,65,127,65,65},{32,64,65,63,1},{127,8,20,34,65},{127,64,64,64,64},{127,2,12,2,127},{127,4,8,16,127},{62,65,65,65,62},{127,9,9,9,6},{62,65,81,33,94},{127,9,25,41,70},{70,73,73,73,49},{1,1,127,1,1},{63,64,64,64,63},{31,32,64,32,31},{63,64,56,64,63},{99,20,8,20,99},{7,8,112,8,7},{97,81,73,69,67},{62,81,73,69,62},{0,66,127,64,0},{98,81,73,73,70},{34,65,73,73,54},{24,20,18,127,16},{39,69,69,69,57},{60,74,73,73,48},{1,113,9,5,3},{54,73,73,73,54},{6,73,73,41,30},{0,54,54,0,0},{8,8,8,8,8},{32,16,8,4,2},{0,0,95,0,0},{2,1,81,9,6},{0,96,96,0,0}};
+    static const char chars[]=" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:-/!?.abcdefghijklmnopqrstuvwxyz'";
+    static const uint16_t glyph[][5]={
+      {0,0,0,0,0},{126,9,9,9,126},{127,73,73,73,54},{62,65,65,65,34},{127,65,65,34,28},{127,73,73,73,65},{127,9,9,9,1},{62,65,73,73,122},{127,8,8,8,127},{65,65,127,65,65},{32,64,65,63,1},{127,8,20,34,65},{127,64,64,64,64},{127,2,12,2,127},{127,4,8,16,127},{62,65,65,65,62},{127,9,9,9,6},{62,65,81,33,94},{127,9,25,41,70},{70,73,73,73,49},{1,1,127,1,1},{63,64,64,64,63},{31,32,64,32,31},{63,64,56,64,63},{99,20,8,20,99},{7,8,112,8,7},{97,81,73,69,67},{62,81,73,69,62},{0,66,127,64,0},{98,81,73,73,70},{34,65,73,73,54},{24,20,18,127,16},{39,69,69,69,57},{60,74,73,73,48},{1,113,9,5,3},{54,73,73,73,54},{6,73,73,41,30},{0,54,54,0,0},{8,8,8,8,8},{32,16,8,4,2},{0,0,95,0,0},{2,1,81,9,6},{0,96,96,0,0},{32,84,84,84,120},{127,72,68,68,56},{56,68,68,68,32},{56,68,68,72,127},{56,84,84,84,24},{8,126,9,1,2},{56,324,324,324,252},{127,8,4,4,120},{0,68,125,64,0},{0,256,253,0,0},{127,16,40,68,0},{0,65,127,64,0},{124,4,24,4,120},{124,8,4,4,120},{56,68,68,68,56},{508,68,68,68,56},{56,68,68,68,508},{124,8,4,4,8},{72,84,84,84,32},{4,63,68,64,32},{60,64,64,32,124},{28,32,64,32,28},{60,64,48,64,60},{68,40,16,40,68},{156,288,288,288,252},{68,100,84,76,68},{0,3,0,0,0}};
     /* The original text has a grey drop shadow: draw it first, then the 1px ink on top. */
     for(int pass=0;pass<2;pass++){
         const char *t=text;
         for(int gx=x;*t && gx<91;t++,gx+=7){
-            char c=*t;if(c>='a'&&c<='z')c-=32;const char *q=strchr(chars,c);unsigned index=q?(unsigned)(q-chars):40;
-            for(int j=0;j<7;j++)for(int i=0;i<5;i++)if(glyph[index][i]&(1u<<j)){
+            char c=*t;const char *q=c?strchr(chars,c):0;unsigned index=q?(unsigned)(q-chars):40;
+            for(int j=0;j<9;j++)for(int i=0;i<5;i++)if(glyph[index][i]&(1u<<j)){
                 int px=gx+i+(pass==0),py=y+j+(pass==0);
                 if(px<0||px>=96||py<0||py>=64)continue;
                 if(pass==0){if(!out[py*96+px])out[py*96+px]=2;}else out[py*96+px]=3;
@@ -472,7 +472,7 @@ int walkerVisitFrame(const uint8_t *ee,const WalkerVisitReward *reward,
         rect(out,0,32,96,1,3);
         rect(out,0,32,1,16,3);
         rect(out,95,32,1,16,3);
-        lcdMessage(ee,out,GREETING_MESSAGE,LCD_BOTTOM|LCD_SIDES,0,frame,"HELLO!");
+        lcdMessage(ee,out,GREETING_MESSAGE,LCD_BOTTOM|LCD_SIDES,0,frame,"Hello!");
     }else if(phase==PLAY){
         static const unsigned shifts[]={0,1,2,1,0};
         unsigned notes=reward->notes, count=notes>=4?step+1:step/2+1;
@@ -494,11 +494,11 @@ int walkerVisitFrame(const uint8_t *ee,const WalkerVisitReward *reward,
                 rect(out,left+5,y+1,2,1,3);
             }
         }
-        lcdMessage(ee,out,ONE_NOTE_MESSAGE+1-notes,LCD_BOX,0,frame,"THEY PLAYED!");
+        lcdMessage(ee,out,ONE_NOTE_MESSAGE+1-notes,LCD_BOX,0,frame,"They played!");
     }else if(phase>=PRESENT){
         raster(ee,out,PRESENT_ART,32,4,32,24,0);
         if(phase==PRESENT){
-            lcdMessage(ee,out,PRESENT_MESSAGE,LCD_BOX,0,frame,"A PRESENT!");
+            lcdMessage(ee,out,PRESENT_MESSAGE,LCD_BOX,0,frame,"A present!");
         }else{
             if(reward->watts){
                 number(ee,out,reward->watts,reward->watts>=10?2:10,32,1);
@@ -511,7 +511,7 @@ int walkerVisitFrame(const uint8_t *ee,const WalkerVisitReward *reward,
                 lcdPanel(ee,out,LCD_ITEM_NAMES+384*reward->itemIndex,32,LCD_TOP|LCD_SIDES,
                          0,frame,lcdItem(item));
             }
-            lcdMessage(ee,out,RECEIVED_MESSAGE,LCD_BOTTOM|LCD_SIDES,0,frame,"RECEIVED!");
+            lcdMessage(ee,out,RECEIVED_MESSAGE,LCD_BOTTOM|LCD_SIDES,0,frame,"Received!");
         }
     }
     return 1;
@@ -539,11 +539,11 @@ static void radarFrame(const uint8_t *ee,const int32_t *s,uint8_t *out,uint32_t 
         if(height>32)height=32;
         rect(out,0,0,96,height,3);rect(out,0,64-height,96,height,3);
     }else if(phase==RADAR_ESCAPED){
-        lcdMessage(ee,out,LCD_RADAR_ESCAPE,LCD_BOX,1,frame,"IT GOT AWAY!");
+        lcdMessage(ee,out,LCD_RADAR_ESCAPE,LCD_BOX,1,frame,"It got away!");
     }else if(phase==RADAR_REVEAL){
-        lcdMessage(ee,out,LCD_RADAR_RESPONSE,LCD_BOX,0,frame,"THERE IT IS!");
+        lcdMessage(ee,out,LCD_RADAR_RESPONSE,LCD_BOX,0,frame,"There it is!");
     }else{
-        lcdMessage(ee,out,LCD_RADAR_SEARCH,LCD_BOX,0,frame,"FIND A POKEMON!");
+        lcdMessage(ee,out,LCD_RADAR_SEARCH,LCD_BOX,0,frame,"Find a Pokemon!");
     }
 }
 
@@ -564,19 +564,19 @@ static void dowsingFrame(const uint8_t *ee,const int32_t *s,uint8_t *out,unsigne
         raster(ee,out,LCD_CURSOR_UP+16*(frame&1),16*s[SEL]+4,40,8,8,0);
         /* fall through */
     case DOWSE_REVEAL:
-        lcdMessage(ee,out,LCD_DOWSE_SEARCH,LCD_BOX,0,frame,"DISCOVER AN ITEM!");
+        lcdMessage(ee,out,LCD_DOWSE_SEARCH,LCD_BOX,0,frame,"Discover an item!");
         break;
     case DOWSE_FOUND:{
         raster(ee,out,LCD_TREASURE,16*s[SEL]+4,24,8,8,0);
         const char *name=lcdItem(walkerRouteItemId(ee,s[CHOICE]));
         unsigned address=s[CHOICE]<10?LCD_ITEM_NAMES+384*s[CHOICE]:0;
         lcdPanel(ee,out,address,32,LCD_TOP|LCD_SIDES,0,frame,name);
-        lcdMessage(ee,out,LCD_FOUND,LCD_BOTTOM|LCD_SIDES,1,frame,"FOUND!");
+        lcdMessage(ee,out,LCD_FOUND,LCD_BOTTOM|LCD_SIDES,1,frame,"Found!");
         break;
     }
     case DOWSE_EMPTY:
         if(s[TRIES]==0)drawRaster(ee,out,LCD_TREASURE,16*s[TARGET]+4,22,8,8,0,1);
-        lcdMessage(ee,out,LCD_DOWSE_EMPTY,LCD_BOX,1,frame,"NOTHING HERE!");
+        lcdMessage(ee,out,LCD_DOWSE_EMPTY,LCD_BOX,1,frame,"Nothing here!");
         break;
     case DOWSE_HINT:{
         int distance=s[SEL]-s[TARGET];
@@ -662,54 +662,54 @@ static void battleRender(const uint8_t *ee,const int32_t *s,uint8_t *out,uint32_
     case B_ENCOUNTER:
         if(f>=3 && (int32_t)(ms-(uint32_t)s[DEADLINE])>=0){
             enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);
-            lcdMessage(ee,out,31,LCD_BOTTOM|LCD_SIDES,1,tick,"A WILD POKEMON!");
+            lcdMessage(ee,out,31,LCD_BOTTOM|LCD_SIDES,1,tick,"A wild Pokemon!");
         }
         break;
     case B_CHOOSE:
         if(hasArtwork(ee,LCD_BATTLE_MENU,768))drawRaster(ee,out,LCD_BATTLE_MENU,0,32,96,32,0,1);
-        else{label(out,"ATK CATCH EVADE",2,47);label(out,"<    O    >",8,57);}
+        else{label(out,"Attack Catch Evade",2,47);label(out,"<    O    >",8,57);}
         break;
     case B_PLAYER:
         if(code==0){
             if(f==4)effectArt(ee,out,ART_HIT);
-            if(f>=4){heldName(ee,out,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ATTACK,LCD_BOTTOM|LCD_SIDES,0,tick,"ATTACKED!");}
+            if(f>=4){heldName(ee,out,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ATTACK,LCD_BOTTOM|LCD_SIDES,0,tick,"Attacked!");}
         }else if(code==1){
-            if(f>=4){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_DODGE,LCD_BOTTOM|LCD_SIDES,0,tick,"DODGED!");}
+            if(f>=4){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_DODGE,LCD_BOTTOM|LCD_SIDES,0,tick,"Dodged!");}
         }else{
             if(f==4)effectArt(ee,out,ART_CRITICAL);
             if(f>=4){
-                lcdPanel(ee,out,LCD_MESSAGES+MSG_CRITICAL*384,32,LCD_TOP|LCD_SIDES,0,tick,"CRITICAL HIT!");
-                lcdMessage(ee,out,MSG_HIT,LCD_BOTTOM|LCD_SIDES,0,tick,"HIT!");
+                lcdPanel(ee,out,LCD_MESSAGES+MSG_CRITICAL*384,32,LCD_TOP|LCD_SIDES,0,tick,"Critical hit!");
+                lcdMessage(ee,out,MSG_HIT,LCD_BOTTOM|LCD_SIDES,0,tick,"Hit!");
             }
         }
         break;
     case B_OPPONENT:
         if(act==0){
             if(f==4)effectArt(ee,out,ART_HIT);
-            if(f>=4){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ATTACK,LCD_BOTTOM|LCD_SIDES,0,tick,"ATTACKED!");}
-        }else if(f>=4){heldName(ee,out,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_DODGE,LCD_BOTTOM|LCD_SIDES,0,tick,"DODGED!");}
+            if(f>=4){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ATTACK,LCD_BOTTOM|LCD_SIDES,0,tick,"Attacked!");}
+        }else if(f>=4){heldName(ee,out,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_DODGE,LCD_BOTTOM|LCD_SIDES,0,tick,"Dodged!");}
         break;
     case B_DEFEATED:
         enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);
-        lcdMessage(ee,out,MSG_DEFEAT,LCD_BOTTOM|LCD_SIDES,0,tick,"YOU LOST!");
+        lcdMessage(ee,out,MSG_DEFEAT,LCD_BOTTOM|LCD_SIDES,0,tick,"You lost!");
         break;
     case B_WATTS:{
         rect(out,0,32,96,16,0);rect(out,0,32,96,1,3);rect(out,0,32,1,16,3);rect(out,95,32,1,16,3);
         unsigned lost=(unsigned)s[BWATTS],digits=lost>=10?2:1;
         number(ee,out,lost,2+(2-(int)digits)*8,32,(int)digits);
         raster(ee,out,ART_WATTS,2+16+4,32,16,16,0);
-        lcdMessage(ee,out,MSG_DROPPED,LCD_BOTTOM|LCD_SIDES,1,tick,"WATTS DROPPED");
+        lcdMessage(ee,out,MSG_DROPPED,LCD_BOTTOM|LCD_SIDES,1,tick,"Watts dropped");
         break;}
-    case B_STARE:lcdMessage(ee,out,MSG_STARE,LCD_BOX,0,tick,"A STARE-DOWN");break;
+    case B_STARE:lcdMessage(ee,out,MSG_STARE,LCD_BOX,0,tick,"A stare-down");break;
     case B_LEAVING:
-        if(f>3){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ESCAPE,LCD_BOTTOM|LCD_SIDES,1,tick,"IT FLED!");}
+        if(f>3){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ESCAPE,LCD_BOTTOM|LCD_SIDES,1,tick,"It fled!");}
         break;
     case B_THROW:{
         int step=(int)f<<2;
         static const int rise[7]={0,1,2,4,5,6,8};
         int bx=0x2c-step,by=0x14-rise[f>6?6:f];
         ballArt(ee,out,bx,by,1);
-        lcdMessage(ee,out,MSG_THROW,LCD_BOX,0,tick,"POKE BALL!");
+        lcdMessage(ee,out,MSG_THROW,LCD_BOX,0,tick,"Poke Ball!");
         break;}
     case B_CLOSE:case B_BREAK:
         if(hasArtwork(ee,ART_CLOUD,192))drawRaster(ee,out,ART_CLOUD,8,0,32,24,0,1);
@@ -726,9 +726,9 @@ static void battleRender(const uint8_t *ee,const int32_t *s,uint8_t *out,uint32_
     case B_CONFIRM:
         ballArt(ee,out,0x14,0x0c,0);
         enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);
-        lcdMessage(ee,out,MSG_CAPTURED,LCD_BOTTOM|LCD_SIDES,1,tick,"CAUGHT!");
+        lcdMessage(ee,out,MSG_CAPTURED,LCD_BOTTOM|LCD_SIDES,1,tick,"Caught!");
         break;
-    case B_FAILED:lcdMessage(ee,out,MSG_ALMOST,LCD_BOX,0,tick,"ALMOST HAD IT!");break;
+    case B_FAILED:lcdMessage(ee,out,MSG_ALMOST,LCD_BOX,0,tick,"Almost had it!");break;
     default:break;
     }
 }
@@ -772,7 +772,7 @@ static void trainerRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32
     if(s[SUB]==1){ /* step cap reached */
         for(int n=0;n<7;n++)digitRaster(ee,out,9,n*8,8);
         raster(ee,out,ART_STEPS,0x38,8,40,16,0);
-        lcdMessage(ee,out,67,LCD_BOX,1,0,"STEP LIMIT!");
+        lcdMessage(ee,out,67,LCD_BOX,1,0,"Step limit!");
         return;
     }
     int days=s[TRAINDAYS];
@@ -833,13 +833,13 @@ static void discardRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32
             snprintf(name,sizeof(name),"%.12s",lcdItem(walkerRouteItemId(ee,(unsigned)s[CHOICE])));
             lcdPanel(ee,out,LCD_ITEM_NAMES+384*s[CHOICE],26,LCD_BOX,0,frame,name);
         }
-        label(out,"LEAVE",38,2);label(out,"NEW ONE?",38,13);
-        raster(ee,out,ART_LEFT,0,48,8,16,0);label(out,"NO",10,52);
-        label(out,"YES",62,52);raster(ee,out,ART_RIGHT,88,48,8,16,0);
+        label(out,"Leave",38,2);label(out,"New one?",38,13);
+        raster(ee,out,ART_LEFT,0,48,8,16,0);label(out,"No",10,52);
+        label(out,"Yes",62,52);raster(ee,out,ART_RIGHT,88,48,8,16,0);
         return;
     }
     raster(ee,out,ART_RETURN,0,0,8,16,0);
-    if(hasArtwork(ee,0x8b30,320))raster(ee,out,0x8b30,8,0,80,16,0);else label(out,"REPLACE?",14,4);
+    if(hasArtwork(ee,0x8b30,320))raster(ee,out,0x8b30,8,0,80,16,0);else label(out,"Replace?",14,4);
     cursor(ee,out,CURSOR_DOWN_ART,(int)frame,slot*0x14+0x18,0x18);
     for(int n=0;n<3;n++)raster(ee,out,pokemon?ART_BALL:ART_TREASURE,n*0x14+0x18,0x20,8,8,0);
     char name[17];
@@ -861,9 +861,9 @@ static void menuRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32_t 
         raster(ee,out,0x1090+n*64,(int)n*16,16+iconY[n],16,16,0);
         if(n==sel)cursor(ee,out,CURSOR_DOWN_ART,(int)frame,(int)n*16+4,16+iconY[n]-8);
     }
-    if(s[SUB]==1)lcdMessage(ee,out,20,LCD_BOX,1,ms/LCD_FRAME_MS,"NOT ENOUGH WATTS");
-    else if(s[SUB]==2)lcdMessage(ee,out,21,LCD_BOX,1,ms/LCD_FRAME_MS,"NO POKEMON");
-    else if(s[SUB]==3)lcdMessage(ee,out,MSG_NO_ITEMS,LCD_BOX,1,ms/LCD_FRAME_MS,"NO ITEMS");
+    if(s[SUB]==1)lcdMessage(ee,out,20,LCD_BOX,1,ms/LCD_FRAME_MS,"Not enough watts");
+    else if(s[SUB]==2)lcdMessage(ee,out,21,LCD_BOX,1,ms/LCD_FRAME_MS,"No Pokemon");
+    else if(s[SUB]==3)lcdMessage(ee,out,MSG_NO_ITEMS,LCD_BOX,1,ms/LCD_FRAME_MS,"No items");
     else{
         numberRight(ee,out,i->watts,0x50,48);raster(ee,out,ART_WATTS,0x50,48,16,16,0);
         if(sel<2){numberRight(ee,out,sel?3:10,0x10,48);raster(ee,out,ART_WATTS,0x18,48,16,16,0);raster(ee,out,0x400,0x28,48,8,16,0);}
@@ -878,7 +878,7 @@ static void connectRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32
         raster(ee,out,0x2350,8,16,32,32,0);raster(ee,out,0x2350,56,16,32,32,1);
     }else raster(ee,out,0x2350,0x20,0x10,32,32,0);
     raster(ee,out,ART_LEFT,0,0,8,16,0);raster(ee,out,ART_RIGHT,0x58,0,8,16,0);
-    lcdMessage(ee,out,0,LCD_BOX,0,tick,"CONNECTING");
+    lcdMessage(ee,out,0,LCD_BOX,0,tick,"Connecting...");
 }
 void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],uint32_t ms){
     memset(out,0,6144);WalkerInfo i;if(!walkerRead(ee,&i))return;
@@ -916,13 +916,13 @@ void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],
         unsigned id=(unsigned)s[RESULT_ID];
         if(id==1&&s[CHOICE]>=0&&s[CHOICE]<3){
             raster(ee,out,0x9a7e + s[CHOICE]*384+frame*192,32,8,32,24,0);enemyName(ee,out,s[CHOICE],32,LCD_TOP|LCD_LEFT);
-            lcdMessage(ee,out,MSG_CAPTURED,LCD_BOTTOM|LCD_SIDES,1,ms/LCD_FRAME_MS,"CAUGHT!");
+            lcdMessage(ee,out,MSG_CAPTURED,LCD_BOTTOM|LCD_SIDES,1,ms/LCD_FRAME_MS,"Caught!");
         }else if(id==2){
             drawRaster(ee,out,ART_ITEM_TREASURE,32,8,32,24,0,0);
             char name[17];snprintf(name,sizeof(name),"%.16s",lcdItem(walkerRouteItemId(ee,(unsigned)s[CHOICE])));
             lcdPanel(ee,out,LCD_ITEM_NAMES+384*(s[CHOICE]<0?0:s[CHOICE]>9?9:s[CHOICE]),32,LCD_TOP|LCD_SIDES,0,ms/LCD_FRAME_MS,name);
-            lcdMessage(ee,out,24,LCD_BOTTOM|LCD_SIDES,1,ms/LCD_FRAME_MS,"FOUND!");
-        }else lcdMessage(ee,out,id<7&&messages[id]?messages[id]:30,LCD_BOX,1,ms/LCD_FRAME_MS,"IT GOT AWAY!");
+            lcdMessage(ee,out,24,LCD_BOTTOM|LCD_SIDES,1,ms/LCD_FRAME_MS,"Found!");
+        }else lcdMessage(ee,out,id<7&&messages[id]?messages[id]:30,LCD_BOX,1,ms/LCD_FRAME_MS,"It got away!");
     }
 }
 unsigned walkerClassicSound(const uint8_t *ee,unsigned score,int16_t *out,unsigned cap){
@@ -1036,7 +1036,7 @@ void walkerFriendlyFrame(const uint8_t *a,const uint8_t *b,const int32_t s[24],u
     raster(own,out,0x91be + frame*192,60-motion,17,32,24,0);
     unsigned move=walkerPartnerMove(own,selected);snprintf(text,sizeof(text),"%u.%.10s",selected+1,walkerMoveName(move));label(out,text,0,45);
     snprintf(text,sizeof(text),"PP %ld",(long)s[2+side*4+selected]);label(out,text,0,55);
-    snprintf(text,sizeof(text),"TURN %ld",(long)s[10]+1);label(out,text,44,55);
+    snprintf(text,sizeof(text),"Turn %ld",(long)s[10]+1);label(out,text,44,55);
 }
 int walkerChooseBattleItem(uint8_t *ee,unsigned *out,int expanded){
     WalkerInfo info;if(!walkerRead(ee,&info)||!info.hasPokemon)return 0;
