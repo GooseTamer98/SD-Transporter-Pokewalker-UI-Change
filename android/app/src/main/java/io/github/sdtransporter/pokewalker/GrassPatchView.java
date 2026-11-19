@@ -11,10 +11,10 @@ import android.view.View;
 final class GrassPatchView extends View {
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path blade=new Path();
-    private final int number;
+    private final int number,marks;
     private final boolean rustling,searched;
-    GrassPatchView(Context context,int number,boolean rustling,boolean searched) {
-        super(context);this.number=number;this.rustling=rustling;this.searched=searched;
+    GrassPatchView(Context context,int number,boolean rustling,boolean searched,int marks) {
+        super(context);this.number=number;this.marks=Math.max(1,marks);this.rustling=rustling;this.searched=searched;
         setClickable(true);setFocusable(true);setMinimumHeight((int)dp(108));
         setContentDescription("Patch "+number+(searched?", searched":rustling?", rustling":" of grass"));
     }
@@ -36,11 +36,11 @@ final class GrassPatchView extends View {
         triangle(canvas,cx-height*.48f,top+height*.2f,height*.65f,height*.8f,rustling?0xffb4b7aa:0xff555e4c);
         triangle(canvas,cx+height*.14f,top,height*.8f,height,rustling?0xffb4b7aa:0xff232b1d);
         triangle(canvas,cx+height*.58f,top+height*.35f,height*.58f,height*.65f,rustling?0xffb4b7aa:0xff555e4c);
-        paint.setAlpha(255);paint.setTextAlign(Paint.Align.CENTER);paint.setTypeface(android.graphics.Typeface.MONOSPACE);paint.setFakeBoldText(true);paint.setTextSize(dp(16));paint.setColor(rustling?0xffb4b7aa:0xff232b1d);
+        paint.setAlpha(255);paint.setTextAlign(Paint.Align.CENTER);paint.setTypeface(android.graphics.Typeface.MONOSPACE);paint.setFakeBoldText(true);paint.setTextSize(Math.min(dp(16),w/7.5f));paint.setColor(rustling?0xffb4b7aa:0xff232b1d);
         canvas.drawText("Patch "+number,w/2,h-dp(23),paint);
-        paint.setTextSize(dp(12));paint.setColor(rustling?0xffb4b7aa:0xff555e4c);
+        paint.setTextSize(Math.min(dp(12),w/8f));paint.setColor(rustling?0xffb4b7aa:0xff555e4c);
         canvas.drawText(searched?"Searched":rustling?"Rustling!":"Grass",w/2,h-dp(7),paint);
-        if(rustling){paint.setColor(0xffb4b7aa);paint.setTextSize(dp(25));canvas.drawText("!",w-dp(18),dp(30),paint);postInvalidateOnAnimation();}
+        if(rustling){paint.setColor(0xffb4b7aa);paint.setTextSize(dp(25));paint.setTextAlign(Paint.Align.RIGHT);canvas.drawText("!!!!".substring(0,Math.min(4,marks)),w-dp(8),dp(30),paint);postInvalidateOnAnimation();}
         if(isPressed()||isFocused()) {
             paint.setColor(rustling?0xffb4b7aa:0xff232b1d);canvas.drawRoundRect(dp(12),h-dp(4),w-dp(12),h-dp(2),dp(1),dp(1),paint);
         }

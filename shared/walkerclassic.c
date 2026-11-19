@@ -39,7 +39,7 @@ static const char *lcdItem(unsigned id){
 static unsigned rnd(uint8_t *ee,unsigned n){return (walkerRandom(ee)>>3)%n;}
 int walkerRadarMarkCount(int round){
     if(round<2)return 1;
-    return round==2?2:3;
+    return round==2?2:4; /* ! ! !! !!!! */
 }
 static void result(int32_t *s,int value,int score){s[VIEW]=RESULT;s[RESULT_ID]=value;s[SOUND]=score+1;}
 static void battleStart(const uint8_t *ee,int32_t *s,uint32_t ms){
@@ -345,7 +345,7 @@ static void radarFrame(const uint8_t *ee,const int32_t *s,uint8_t *out,uint32_t 
         unsigned address=LCD_RADAR_BUBBLE+64*bubble;
         if(hasArtwork(ee,address,64))drawRaster(ee,out,address,x,y,16,16,0,1);
         else{
-            static const char *const fallback[]={"!","!!","!!!","?"};
+            static const char *const fallback[]={"!","!!","!!!","!!!!"};
             label(out,fallback[bubble],x,y+4);
         }
     }
@@ -430,6 +430,16 @@ void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],
         int shift=anim?(int)((ms/70)%5):0;
         raster(ee,out,0x9a7e + s[CHOICE]*384+(battleFrame&1)*192,8+shift,0,32,24,!(ee[WALKER_ROUTE+0x52+s[CHOICE]*16+14]&1));
         raster(ee,out,0x91be + (battleFrame&1)*192,56-shift,8,32,24,0);
+        if(anim && s[LAST_ACTION]!=2){ /* impact sparks: on the wild Pokemon, then on yours when it hits back */
+            unsigned t=(uint32_t)(ms-(uint32_t)s[ANIM]);
+            int hit=0,cx=0,cy=0;
+            if(t>=150 && t<350 && s[PREV_ENEMY]>s[BAT+1]){hit=1;cx=24;cy=12;}
+            else if(t>=350 && t<600 && s[PREV_HP]>s[BAT]){hit=1;cx=72;cy=20;}
+            if(hit && ((t/60)&1)==0){
+                rect(out,cx-1,cy-7,3,15,3);rect(out,cx-7,cy-1,15,3,3);
+                for(int d=-4;d<=4;d+=2){pixel(out,cx+d,cy+d,3);pixel(out,cx+d,cy-d,3);}
+            }
+        }
         for(int n=0;n<s[BAT];n++)raster(ee,out,LCD_HP,56+8*n,0,8,8,0);
         for(int n=0;n<s[BAT+1];n++)raster(ee,out,LCD_HP,8+8*n,24,8,8,0);
         if(s[SUB]==0){

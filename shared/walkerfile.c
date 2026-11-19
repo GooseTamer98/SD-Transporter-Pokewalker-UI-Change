@@ -761,6 +761,12 @@ void walkerBattleAction(uint8_t *ee, WalkerBattle *b, int action) {
         b->row = 1;
         b->lastOutcome = 7;
     } else {
+        /* The wild Pokemon may also run away while you attack, not only when you evade. */
+        if ((walkerRandom(ee) >> 3) % 100 < w[2] / 2) {
+            b->finished = 1;
+            b->lastOutcome = 4;
+            return;
+        }
         if (result == 0)
             b->enemyHp--;
         else if (result == 2)

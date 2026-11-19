@@ -75,6 +75,7 @@ public final class MainActivity extends Activity {
             if(event.getActionMasked()!=MotionEvent.ACTION_UP)return true;
             handler.removeCallbacks(imageHold);
             if(page.equals("peer")&&peerSession!=null){if(event.getY()>view.getHeight()*.65f){float x=event.getX()/view.getWidth();if(x<.4f)peerSession.select(-1);else if(x>.6f)peerSession.select(1);else peerSession.choose();}return true;}
+            if(page.equals("battle")){int key=picture.imageButton(event.getX(),event.getY());if(key>=0&&key==pressedImageButton&&!battleAnimating)battleAction(key==0?0:key==1?2:1);pressedImageButton=-1;return true;}
             if(!page.equals("classic")){openClassic();return true;}
             int button=picture.imageButton(event.getX(),event.getY());if(!imageHeld&&button>=0&&button==pressedImageButton)classicPress(button);pressedImageButton=-1;
             return true;
@@ -117,7 +118,8 @@ public final class MainActivity extends Activity {
         row.addView(b,lp);return b;
     }
     private View grassPatch(LinearLayout row,int number,boolean rustling,boolean searched,Runnable action){
-        GrassPatchView view=new GrassPatchView(this,number,rustling,searched);
+        // Original Radar bubbles by search round: ! ! !! !!!!
+        GrassPatchView view=new GrassPatchView(this,number,rustling,searched,round<2?1:round==2?2:4);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(108),1);lp.setMargins(dp(3),dp(4),dp(3),dp(4));row.addView(view,lp);
         view.setOnClickListener(v->action.run());view.setEnabled(!searched);return view;
     }
@@ -481,7 +483,7 @@ public final class MainActivity extends Activity {
     private void startBattle(int which){generation++;battleAnimating=false;battleVisualAction=-1;battleAnimationStart=SystemClock.elapsedRealtime();previousPlayerHp=previousWildHp=4;battle=new int[]{4,4,0,0,0,which,0};battleScreen("Attack, evade or catch.");}
     private void battleScreen(String message){
         page="battle";heading("Wild "+Native.species(Native.command(state.data,9,battle[5])));note(message);note("Your HP: "+battle[0]+" / 4     Wild HP: "+battle[1]+" / 4");
-        button("Attack",()->battleAction(0)).setEnabled(!battleAnimating);button("Evade",()->battleAction(1)).setEnabled(!battleAnimating);button("Throw Poké Ball",()->battleAction(2)).setEnabled(!battleAnimating);button("Leave",this::home);
+        note("◀ Attack     ● Poké Ball     ▶ Evade");LinearLayout keys=patchRow();patch(keys,"◀",()->battleAction(0)).setEnabled(!battleAnimating);patch(keys,"●",()->battleAction(2)).setEnabled(!battleAnimating);patch(keys,"▶",()->battleAction(1)).setEnabled(!battleAnimating);button("Leave",this::home);
     }
     private void battleAction(int action){
         if(battleAnimating)return;
@@ -510,10 +512,10 @@ public final class MainActivity extends Activity {
     private void dowseScreen(String message){
         page="dowsing";heading("Dowsing");note(message);note(attempts+" attempts left");
         LinearLayout row=null;
-        for(int n=0;n<6;n++){if(n%3==0)row=patchRow();final int index=n;View b=grassPatch(row,n+1,false,n==empty,()->{
+        for(int n=0;n<6;n++){if(n==0)row=patchRow();final int index=n;View b=grassPatch(row,n+1,false,n==empty,()->{
             if(index==hidden){storeReward(true,item,-1);return;}
             empty=index;attempts--;if(attempts==0){result("Nothing found","Try again on your next search.");return;}
-            int distance=Math.abs(index%3-hidden%3)+Math.abs(index/3-hidden/3);dowseScreen(distance<=1?"It's near!":"It's far away…");
+            int distance=Math.abs(index-hidden);dowseScreen(distance<=1?"It's near!":"It's far away…");
         });b.setEnabled(n!=empty);}
         button("Leave search",this::home);
     }
@@ -650,14 +652,25 @@ public final class MainActivity extends Activity {
             for(int py=0;py<height;py++)for(int px=0;px<width;px++){int at=offset+((py/8)*width+px)*2,bit=py&7,color=((state.data[at]>>bit)&1)*2+((state.data[at+1]>>bit)&1);if(color!=0){paint.setColor(colors[color]);int dx=flip?width-1-px:px;c.drawRect(x+dx*scale,y+py*scale,x+(dx+1)*scale,y+(py+1)*scale,paint);}}
             paint.setAntiAlias(true);
         }
+        private void spark(Canvas c,float cx,float cy,float scale){
+            paint.setAntiAlias(false);paint.setColor(0xff232b1d);
+            c.drawRect(cx-scale,cy-8*scale,cx+2*scale,cy+8*scale,paint);c.drawRect(cx-8*scale,cy-scale,cx+8*scale,cy+2*scale,paint);
+            for(int d=-5;d<=5;d+=2){c.drawRect(cx+d*scale,cy+d*scale,cx+(d+1)*scale,cy+(d+1)*scale,paint);c.drawRect(cx+d*scale,cy-d*scale,cx+(d+1)*scale,cy-(d-1)*scale,paint);}
+            paint.setAntiAlias(true);
+        }
         private void drawBattle(Canvas c,float left,float top,float right,float bottom){
             long elapsed=Math.max(0,SystemClock.elapsedRealtime()-battleAnimationStart);float scale=Math.max(1,(float)Math.floor(Math.min((right-left)/96,(bottom-top)/64)));
             float x=(left+right-96*scale)/2,y=(top+bottom-64*scale)/2;
             int frame=(int)(elapsed/160)&1;float player=56,wild=8;boolean showWild=true,showPlayer=true;
             float t=Math.min(1,elapsed/(battleVisualAction==2?1800f:1200f));
             if(battleVisualAction<0)wild=8-Math.max(0,1-elapsed/450f)*40;
-            else if(battleAnimating&&battleVisualAction==0){if(t<.45f)player-=16*(float)Math.sin(t/.45*Math.PI);else wild+=16*(float)Math.sin((t-.45)/.55*Math.PI);if(t>.3f&&t<.48f)showWild=frame==0;if(t>.7f&&t<.86f)showPlayer=frame==0;}
+            else if(battleAnimating&&battleVisualAction==0){if(t<.45f)player-=16*(float)Math.sin(t/.45*Math.PI);else wild+=16*(float)Math.sin((t-.45)/.55*Math.PI);if(t>.3f&&t<.48f)showWild=frame==0;if(t>.7f&&t<.86f)showPlayer=frame==0;if(battle[6]==4&&t>.45f)wild-=(t-.45f)*70;}
             else if(battleAnimating&&battleVisualAction==1){wild+=16*(float)Math.sin(Math.min(1,t*2)*Math.PI);player+=Math.min(8,t*20);if(battle[6]==7&&t>.5f)player=56-16*(float)Math.sin((t-.5)*2*Math.PI);if(battle[6]==4)wild-=t*42;}
+            if(battleAnimating&&battleVisualAction!=2){ // impact sparks: on the wild Pokémon, then on yours if it hits back
+                boolean blink=((int)(elapsed/60)&1)==0;
+                if(blink&&t>.12f&&t<.5f&&battle[1]<previousWildHp)spark(c,x+(wild+16)*scale,y+34*scale,scale);
+                else if(blink&&t>.5f&&t<.9f&&battle[0]<previousPlayerHp)spark(c,x+(player+16)*scale,y+34*scale,scale);
+            }
             boolean ball=battleAnimating&&battleVisualAction==2;
             if(ball&&t>.28f)showWild=false;
             if(showWild)bitmap(c,0x9a7e+battle[5]*384+frame*192,32,24,x+wild*scale,y+22*scale,scale,(state.data[0x8f52+battle[5]*16+14]&1)==0);
