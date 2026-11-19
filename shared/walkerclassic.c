@@ -32,10 +32,11 @@ static unsigned radarSound(const uint8_t *ee,int32_t *s,unsigned score,uint32_t 
 }
 /* Item names for the 16-character LCD: a TM/HM name that is too long drops
  * its "TM59 " prefix so the move name stays readable. */
+static const char *caps(const char *name);
 static const char *lcdItem(unsigned id){
     const char *name=itemName(id);
-    if(strlen(name)>16 && (name[0]=='T'||name[0]=='H') && name[1]=='M' && name[4]==' ')return name+5;
-    return name;
+    if(strlen(name)>16 && (name[0]=='T'||name[0]=='H') && name[1]=='M' && name[4]==' ')name+=5;
+    return caps(name);
 }
 static unsigned rnd(uint8_t *ee,unsigned n){return (walkerRandom(ee)>>3)%n;}
 int walkerRadarMarkCount(int round){
@@ -393,13 +394,14 @@ static void number(const uint8_t *ee,uint8_t *out,uint32_t value,int x,int y,int
     unsigned length=(unsigned)strlen(text);if(length>10)return;
     for(unsigned n=0;n<length;n++)raster(ee,out,0x280+(text[n]-'0')*32,x+n*8,y,8,16,0);
 }
-/* Pokemon names are drawn in capitals on the original LCD (GEODUDE), unlike its sentence-case messages. */
-static const char *speciesCaps(unsigned id){
-    static char buffer[2][24];static unsigned slot;
-    char *out=buffer[slot++&1];const char *name=speciesName(id);unsigned n=0;
-    for(;name[n]&&n<23;n++)out[n]=name[n]>='a'&&name[n]<='z'?(char)(name[n]-32):name[n];
+/* Names (Pokemon, items, trainer, course) are drawn in capitals like the rest of the LCD; messages use sentence case. */
+static const char *caps(const char *name){
+    static char buffer[4][40];static unsigned slot;
+    char *out=buffer[slot++&3];unsigned n=0;
+    for(;name[n]&&n<39;n++)out[n]=name[n]>='a'&&name[n]<='z'?(char)(name[n]-32):name[n];
     out[n]=0;return out;
 }
+static const char *speciesCaps(unsigned id){return caps(speciesName(id));}
 /* Small plain labels only where custom app features have no uploaded label. */
 static void label(uint8_t *out,const char *text,int x,int y){
     static const char chars[]=" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:-/!?.abcdefghijklmnopqrstuvwxyz'";
@@ -787,9 +789,9 @@ static void trainerRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32
         raster(ee,out,ART_MENU_LABELS+3*320,8,0,80,16,0);
         raster(ee,out,ART_RETURN,0,0,8,16,0);raster(ee,out,ART_RIGHT,0x58,0,8,16,0);
         raster(ee,out,ART_TRAINER_ICON,0,16,16,16,0);
-        if(hasArtwork(ee,ART_TRAINER_NAME,320))raster(ee,out,ART_TRAINER_NAME,16,16,80,16,0);else label(out,info.trainer,18,20);
+        if(hasArtwork(ee,ART_TRAINER_NAME,320))raster(ee,out,ART_TRAINER_NAME,16,16,80,16,0);else label(out,caps(info.trainer),18,20);
         raster(ee,out,ART_COURSE_ICON,0,32,16,16,0);
-        if(hasArtwork(ee,ART_COURSE_NAME,320))raster(ee,out,ART_COURSE_NAME,16,32,80,16,0);else label(out,info.route,18,36);
+        if(hasArtwork(ee,ART_COURSE_NAME,320))raster(ee,out,ART_COURSE_NAME,16,32,80,16,0);else label(out,caps(info.route),18,36);
         raster(ee,out,ART_TIME,0,48,32,16,0);
         int64_t secs=((int64_t)s[CLOCK_NOW]+s[CLOCK_TZ]+(int64_t)((ms-(uint32_t)s[CLOCK_MS])/1000u))%86400;
         if(secs<0)secs+=86400;
