@@ -398,17 +398,16 @@ static void label(uint8_t *out,const char *text,int x,int y){
     static const char chars[]=" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:-/!?.";
     static const uint8_t glyph[][5]={
       {0,0,0,0,0},{126,9,9,9,126},{127,73,73,73,54},{62,65,65,65,34},{127,65,65,34,28},{127,73,73,73,65},{127,9,9,9,1},{62,65,73,73,122},{127,8,8,8,127},{65,65,127,65,65},{32,64,65,63,1},{127,8,20,34,65},{127,64,64,64,64},{127,2,12,2,127},{127,4,8,16,127},{62,65,65,65,62},{127,9,9,9,6},{62,65,81,33,94},{127,9,25,41,70},{70,73,73,73,49},{1,1,127,1,1},{63,64,64,64,63},{31,32,64,32,31},{63,64,56,64,63},{99,20,8,20,99},{7,8,112,8,7},{97,81,73,69,67},{62,81,73,69,62},{0,66,127,64,0},{98,81,73,73,70},{34,65,73,73,54},{24,20,18,127,16},{39,69,69,69,57},{60,74,73,73,48},{1,113,9,5,3},{54,73,73,73,54},{6,73,73,41,30},{0,54,54,0,0},{8,8,8,8,8},{32,16,8,4,2},{0,0,95,0,0},{2,1,81,9,6},{0,96,96,0,0}};
-    /* The original text is bold with a grey drop shadow, so draw each glyph pixel 2x2: shadow first, then ink. */
+    /* The original text has a grey drop shadow: draw it first, then the 1px ink on top. */
     for(int pass=0;pass<2;pass++){
         const char *t=text;
         for(int gx=x;*t && gx<91;t++,gx+=7){
             char c=*t;if(c>='a'&&c<='z')c-=32;const char *q=strchr(chars,c);unsigned index=q?(unsigned)(q-chars):40;
-            for(int j=0;j<7;j++)for(int i=0;i<5;i++)if(glyph[index][i]&(1u<<j))
-                for(int dy=0;dy<2;dy++)for(int dx=0;dx<2;dx++){
-                    int px=gx+i+dx+(pass==0),py=y+j+dy+(pass==0);
-                    if(px<0||px>=96||py<0||py>=64)continue;
-                    if(pass==0){if(!out[py*96+px])out[py*96+px]=2;}else out[py*96+px]=3;
-                }
+            for(int j=0;j<7;j++)for(int i=0;i<5;i++)if(glyph[index][i]&(1u<<j)){
+                int px=gx+i+(pass==0),py=y+j+(pass==0);
+                if(px<0||px>=96||py<0||py>=64)continue;
+                if(pass==0){if(!out[py*96+px])out[py*96+px]=2;}else out[py*96+px]=3;
+            }
         }
     }
 }
