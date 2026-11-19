@@ -398,8 +398,18 @@ static void label(uint8_t *out,const char *text,int x,int y){
     static const char chars[]=" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:-/!?.";
     static const uint8_t glyph[][5]={
       {0,0,0,0,0},{126,9,9,9,126},{127,73,73,73,54},{62,65,65,65,34},{127,65,65,34,28},{127,73,73,73,65},{127,9,9,9,1},{62,65,73,73,122},{127,8,8,8,127},{65,65,127,65,65},{32,64,65,63,1},{127,8,20,34,65},{127,64,64,64,64},{127,2,12,2,127},{127,4,8,16,127},{62,65,65,65,62},{127,9,9,9,6},{62,65,81,33,94},{127,9,25,41,70},{70,73,73,73,49},{1,1,127,1,1},{63,64,64,64,63},{31,32,64,32,31},{63,64,56,64,63},{99,20,8,20,99},{7,8,112,8,7},{97,81,73,69,67},{62,81,73,69,62},{0,66,127,64,0},{98,81,73,73,70},{34,65,73,73,54},{24,20,18,127,16},{39,69,69,69,57},{60,74,73,73,48},{1,113,9,5,3},{54,73,73,73,54},{6,73,73,41,30},{0,54,54,0,0},{8,8,8,8,8},{32,16,8,4,2},{0,0,95,0,0},{2,1,81,9,6},{0,96,96,0,0}};
-    for(;*text && x<94;text++,x+=6){char c=*text;if(c>='a'&&c<='z')c-=32;const char *p=strchr(chars,c);unsigned index=p?(unsigned)(p-chars):40;
-        for(int j=0;j<7;j++)for(int i=0;i<5;i++)if(glyph[index][i]&(1u<<j))pixel(out,x+i,y+j,3);
+    /* The original text is bold with a grey drop shadow, so draw each glyph pixel 2x2: shadow first, then ink. */
+    for(int pass=0;pass<2;pass++){
+        const char *t=text;
+        for(int gx=x;*t && gx<91;t++,gx+=7){
+            char c=*t;if(c>='a'&&c<='z')c-=32;const char *q=strchr(chars,c);unsigned index=q?(unsigned)(q-chars):40;
+            for(int j=0;j<7;j++)for(int i=0;i<5;i++)if(glyph[index][i]&(1u<<j))
+                for(int dy=0;dy<2;dy++)for(int dx=0;dx<2;dx++){
+                    int px=gx+i+dx+(pass==0),py=y+j+dy+(pass==0);
+                    if(px<0||px>=96||py<0||py>=64)continue;
+                    if(pass==0){if(!out[py*96+px])out[py*96+px]=2;}else out[py*96+px]=3;
+                }
+        }
     }
 }
 
@@ -816,23 +826,21 @@ static void discardRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32
     if(s[SUB]==1){ /* are you sure you want to leave the new find behind? */
         char name[17];
         if(pokemon){
-            raster(ee,out,0x9a7e + s[CHOICE]*384+frame*192,8,0,32,24,0);
-            snprintf(name,sizeof(name),"%.16s",speciesName(walkerRoutePokemonId(ee,(unsigned)s[CHOICE])));
-            label(out,"LEAVE THE",46,3);label(out,"NEW CATCH?",46,13);
-            nameBand(ee,out,LCD_ENCOUNTER_NAMES+s[CHOICE]*320,26,LCD_TOP|LCD_BOTTOM|LCD_LEFT,name);
+            raster(ee,out,0x9a7e + s[CHOICE]*384+frame*192,0,0,32,24,0);
+            nameBand(ee,out,LCD_ENCOUNTER_NAMES+s[CHOICE]*320,26,LCD_TOP|LCD_BOTTOM|LCD_LEFT,
+                     (snprintf(name,sizeof(name),"%.12s",speciesName(walkerRoutePokemonId(ee,(unsigned)s[CHOICE]))),name));
         }else{
-            drawRaster(ee,out,ART_ITEM_TREASURE,8,0,32,24,0,0);
-            snprintf(name,sizeof(name),"%.16s",lcdItem(walkerRouteItemId(ee,(unsigned)s[CHOICE])));
-            label(out,"LEAVE THE",46,3);label(out,"NEW ITEM?",46,13);
+            drawRaster(ee,out,ART_ITEM_TREASURE,0,0,32,24,0,0);
+            snprintf(name,sizeof(name),"%.12s",lcdItem(walkerRouteItemId(ee,(unsigned)s[CHOICE])));
             lcdPanel(ee,out,LCD_ITEM_NAMES+384*s[CHOICE],26,LCD_BOX,0,frame,name);
         }
-        label(out,"IT WILL BE LOST",4,44);
-        raster(ee,out,ART_LEFT,0,48,8,16,0);label(out,"NO",12,52);
-        label(out,"YES",66,52);raster(ee,out,ART_RIGHT,88,48,8,16,0);
+        label(out,"LEAVE",38,2);label(out,"NEW ONE?",38,13);
+        raster(ee,out,ART_LEFT,0,48,8,16,0);label(out,"NO",10,52);
+        label(out,"YES",62,52);raster(ee,out,ART_RIGHT,88,48,8,16,0);
         return;
     }
     raster(ee,out,ART_RETURN,0,0,8,16,0);
-    if(hasArtwork(ee,0x8b30,320))raster(ee,out,0x8b30,8,0,80,16,0);else label(out,"REPLACE ONE?",10,4);
+    if(hasArtwork(ee,0x8b30,320))raster(ee,out,0x8b30,8,0,80,16,0);else label(out,"REPLACE?",14,4);
     cursor(ee,out,CURSOR_DOWN_ART,(int)frame,slot*0x14+0x18,0x18);
     for(int n=0;n<3;n++)raster(ee,out,pokemon?ART_BALL:ART_TREASURE,n*0x14+0x18,0x20,8,8,0);
     char name[17];
@@ -862,6 +870,16 @@ static void menuRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32_t 
         if(sel<2){numberRight(ee,out,sel?3:10,0x10,48);raster(ee,out,ART_WATTS,0x18,48,16,16,0);raster(ee,out,0x400,0x28,48,8,16,0);}
     }
     raster(ee,out,ART_LEFT,0,0,8,16,0);raster(ee,out,ART_RIGHT,0x58,0,8,16,0);
+}
+static void connectRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32_t ms){
+    unsigned tick=ms/LCD_FRAME_MS;
+    /* As on the device: the walker, a blinking signal icon, and the CONNECTING message. */
+    if(hasArtwork(ee,0x2450,32)&&(tick&1))raster(ee,out,0x2450,0x2c,0,8,16,0);
+    if(s[VIEW]==PEERS||s[SEL]){ /* two walkers when linking with another phone/profile */
+        raster(ee,out,0x2350,8,16,32,32,0);raster(ee,out,0x2350,56,16,32,32,1);
+    }else raster(ee,out,0x2350,0x20,0x10,32,32,0);
+    raster(ee,out,ART_LEFT,0,0,8,16,0);raster(ee,out,ART_RIGHT,0x58,0,8,16,0);
+    lcdMessage(ee,out,0,LCD_BOX,0,tick,"CONNECTING");
 }
 void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],uint32_t ms){
     memset(out,0,6144);WalkerInfo i;if(!walkerRead(ee,&i))return;
@@ -893,14 +911,19 @@ void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],
     }else if(s[VIEW]==SETTINGS){
         settingsRender(ee,out,s,ms);
     }else if(s[VIEW]==CONNECT || s[VIEW]==PEERS){
-        raster(ee,out,0x2350,32,7,32,32,0);label(out,s[VIEW]==PEERS?"CHOOSE DEVICE":s[SEL]?"OTHER WALKER":"CONSOLE",1,43);label(out,"< CONNECT >",8,56);
+        connectRender(ee,out,s,ms);
     }else if(s[VIEW]==RESULT){
-        const char *message=s[RESULT_ID]==1?"CAUGHT!":s[RESULT_ID]==2?"ITEM FOUND!":s[RESULT_ID]==4?"NO POKEMON":s[RESULT_ID]==5?"NOT ENOUGH WATTS":s[RESULT_ID]==6?"NO ITEMS":"IT GOT AWAY!";
-        label(out,message,0,6);
-        if(s[RESULT_ID]==1)raster(ee,out,0x9a7e + s[CHOICE]*384+frame*192,32,21,32,24,0);
-        if(s[RESULT_ID]==1){char name[17];snprintf(name,sizeof(name),"%.16s",speciesName(walkerRoutePokemonId(ee,s[CHOICE])));label(out,name,0,46);}
-        if(s[RESULT_ID]==2){char name[17];snprintf(name,sizeof(name),"%.16s",lcdItem(walkerRouteItemId(ee,s[CHOICE])));label(out,name,0,25);}
-        label(out,"PRESS A BUTTON",4,56);
+        static const uint8_t messages[]={30,0,0,30,21,20,22};  /* 3 got away, 4 no Pokemon, 5 watts, 6 no items */
+        unsigned id=(unsigned)s[RESULT_ID];
+        if(id==1&&s[CHOICE]>=0&&s[CHOICE]<3){
+            raster(ee,out,0x9a7e + s[CHOICE]*384+frame*192,32,8,32,24,0);enemyName(ee,out,s[CHOICE],32,LCD_TOP|LCD_LEFT);
+            lcdMessage(ee,out,MSG_CAPTURED,LCD_BOTTOM|LCD_SIDES,1,ms/LCD_FRAME_MS,"CAUGHT!");
+        }else if(id==2){
+            drawRaster(ee,out,ART_ITEM_TREASURE,32,8,32,24,0,0);
+            char name[17];snprintf(name,sizeof(name),"%.16s",lcdItem(walkerRouteItemId(ee,(unsigned)s[CHOICE])));
+            lcdPanel(ee,out,LCD_ITEM_NAMES+384*(s[CHOICE]<0?0:s[CHOICE]>9?9:s[CHOICE]),32,LCD_TOP|LCD_SIDES,0,ms/LCD_FRAME_MS,name);
+            lcdMessage(ee,out,24,LCD_BOTTOM|LCD_SIDES,1,ms/LCD_FRAME_MS,"FOUND!");
+        }else lcdMessage(ee,out,id<7&&messages[id]?messages[id]:30,LCD_BOX,1,ms/LCD_FRAME_MS,"IT GOT AWAY!");
     }
 }
 unsigned walkerClassicSound(const uint8_t *ee,unsigned score,int16_t *out,unsigned cap){
@@ -1006,15 +1029,15 @@ int walkerFriendlyTurn(const uint8_t *a,const uint8_t *b,int32_t s[24],unsigned 
 void walkerFriendlyFrame(const uint8_t *a,const uint8_t *b,const int32_t s[24],unsigned side,unsigned selected,uint8_t out[6144],uint32_t ms){
     memset(out,0,6144);if(side>1||selected>3)return;
     const uint8_t *own=side?b:a,*peer=side?a:b;unsigned frame=(ms/400)&1,other=side^1;
-    char text[16];snprintf(text,sizeof(text),"%.7s",speciesName(own[WALKER_ROUTE]|own[WALKER_ROUTE+1]<<8));label(out,text,54,0);
-    snprintf(text,sizeof(text),"%.7s",speciesName(peer[WALKER_ROUTE]|peer[WALKER_ROUTE+1]<<8));label(out,text,0,0);
+    char text[16];snprintf(text,sizeof(text),"%.6s",speciesName(own[WALKER_ROUTE]|own[WALKER_ROUTE+1]<<8));label(out,text,54,0);
+    snprintf(text,sizeof(text),"%.6s",speciesName(peer[WALKER_ROUTE]|peer[WALKER_ROUTE+1]<<8));label(out,text,0,0);
     rect(out,1,9,39,4,1);rect(out,56,9,39,4,1);rect(out,1,9,(s[other]*39+99)/100,4,3);rect(out,56,9,(s[side]*39+99)/100,4,3);
     int motion=(int)((ms/100)%3)-1;
     raster(peer,out,0x91be + frame*192,4+motion,17,32,24,!(peer[WALKER_ROUTE+14]&1));
     raster(own,out,0x91be + frame*192,60-motion,17,32,24,0);
-    unsigned move=walkerPartnerMove(own,selected);snprintf(text,sizeof(text),"%u.%.12s",selected+1,walkerMoveName(move));label(out,text,0,46);
-    snprintf(text,sizeof(text),"PP %ld",(long)s[2+side*4+selected]);label(out,text,0,56);
-    snprintf(text,sizeof(text),"TURN %ld",(long)s[10]+1);label(out,text,50,56);
+    unsigned move=walkerPartnerMove(own,selected);snprintf(text,sizeof(text),"%u.%.10s",selected+1,walkerMoveName(move));label(out,text,0,45);
+    snprintf(text,sizeof(text),"PP %ld",(long)s[2+side*4+selected]);label(out,text,0,55);
+    snprintf(text,sizeof(text),"TURN %ld",(long)s[10]+1);label(out,text,44,55);
 }
 int walkerChooseBattleItem(uint8_t *ee,unsigned *out,int expanded){
     WalkerInfo info;if(!walkerRead(ee,&info)||!info.hasPokemon)return 0;
