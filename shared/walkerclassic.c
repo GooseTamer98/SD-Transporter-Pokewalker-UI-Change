@@ -618,10 +618,15 @@ static void ballArt(const uint8_t *ee,uint8_t *out,int x,int y,int masked){
         rect(out,x+1,y,6,8,3);rect(out,x,y+1,8,6,3);rect(out,x+2,y+2,4,4,0);rect(out,x+1,y+3,6,1,3);return;
     }
     if(!masked){drawRaster(ee,out,ART_BALL,x,y,8,8,0,1);return;}
+    /* The firmware ANDs this mask into the screen, so its set bits normally mean "keep the background"
+     * and the clear bits are the ball. Pick the polarity from the data: a round 8x8 ball covers most of
+     * the square, so whichever reading gives the larger area is the silhouette. */
+    int set=0;for(int i=0;i<8;i++)for(int j=0;j<8;j++)if(ee[ART_BALL_MASK+i]&(1u<<j))set++;
+    int ballIsSet=set>=32;
     for(int i=0;i<8;i++)for(int j=0;j<8;j++){
-        if(!(ee[ART_BALL_MASK+i]&(1u<<j)))continue;
         unsigned n=ART_BALL+i*2,c=(((ee[n]>>j)&1)<<1)|((ee[n+1]>>j)&1);
-        pixel(out,x+i,y+j,c);
+        int inside=((ee[ART_BALL_MASK+i]>>j)&1)==(unsigned)ballIsSet;
+        if(inside||c)pixel(out,x+i,y+j,c);
     }
 }
 static void effectArt(const uint8_t *ee,uint8_t *out,unsigned address){
