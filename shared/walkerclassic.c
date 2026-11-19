@@ -284,7 +284,10 @@ int walkerClassicInput(uint8_t *ee,int32_t s[40],int button,uint32_t now,uint32_
     switch(s[VIEW]){
     case HOME:s[VIEW]=MENU;s[SEL]=button==0?5:button==1?2:0;s[SOUND]=1;break;
     case MENU:
-        if(button!=1){s[SEL]=(s[SEL]+(button==0?5:1))%6;break;}
+        if(button!=1){ /* moving past either end of the carousel returns to the main screen */
+            if((button==0&&s[SEL]<=0)||(button==2&&s[SEL]>=5)){s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;s[SOUND]=2;break;}
+            s[SEL]+=button==0?-1:1;break;
+        }
         s[SEL]=s[SEL]<0||s[SEL]>5?0:s[SEL];s[SUB]=0;s[SOUND]=1;
         if(s[SEL]==0){
             unsigned visitor=walkerPendingEncounter(ee);WalkerEncounter encounter;
