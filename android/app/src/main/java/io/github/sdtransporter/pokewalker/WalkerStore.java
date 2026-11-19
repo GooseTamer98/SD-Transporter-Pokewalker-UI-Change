@@ -19,7 +19,7 @@ final class WalkerStore {
     int mode=2,rate=10,boot=-1;
     long sensorLast=-1,sensorElapsed;
     boolean revoked,returnPending,expandedItems,visitBlocked;
-    int classicVolume=2,classicContrast=1;
+    int classicVolume=2,classicContrast=4; // contrast: 0-9 like the original settings screen
     String battleSession="",battlePeer="";
     boolean battlePaid,battleDone,battleRewarded;
     int battleRewardChoice=-1,battleWinner;
@@ -65,7 +65,7 @@ final class WalkerStore {
             try{returnPending=in.readBoolean();}catch(EOFException legacy){returnPending=false;}
             if(in.available()>0)trainerKey=in.readUTF();
             if(in.available()>0)expandedItems=in.readBoolean();
-            if(in.available()>0){classicVolume=in.readInt();classicContrast=in.readInt();if(classicVolume<0||classicVolume>2||classicContrast<0||classicContrast>2)throw new IOException("Invalid display settings");}
+            if(in.available()>0){classicVolume=in.readInt();classicContrast=in.readInt();if(classicContrast>=10&&classicContrast<=19)classicContrast-=10;else if(classicContrast>=0&&classicContrast<=2)classicContrast=new int[]{1,4,7}[classicContrast]; /* older 3-step value */ if(classicVolume<0||classicVolume>2||classicContrast<0||classicContrast>9)throw new IOException("Invalid display settings");}
             if(in.available()>0){if(in.readInt()!=0x50425731)throw new IOException("Invalid battle record");battleSession=in.readUTF();battlePeer=in.readUTF();battlePaid=in.readBoolean();battleDone=in.readBoolean();battleRewarded=in.readBoolean();battleRewardChoice=in.readInt();battleWinner=in.readInt();if(!battleSession.isEmpty()&&!battleSession.matches("[a-f0-9]{32}"))throw new IOException("Invalid battle session");if(battleRewardChoice < -1 || battleRewardChoice>0x8218||battleWinner<0||battleWinner>3)throw new IOException("Invalid battle result");}
             if(!trainerKey.isEmpty()&&!trainerKey.matches("[a-f0-9]{36}"))throw new IOException("Invalid trainer binding");
             if(mode<0||mode>2||rate<1||rate>86400)throw new IOException("Invalid settings");
@@ -202,7 +202,7 @@ final class WalkerStore {
             if(data!=null)out.write(data);
             out.writeUTF(token);out.writeUTF(host);out.writeUTF(pin);out.writeUTF(pendingToken);
             out.writeInt(mode);out.writeInt(rate);out.writeInt(boot);out.writeLong(sensorLast);
-            out.writeLong(sensorElapsed);out.writeBoolean(revoked);out.writeBoolean(returnPending);out.writeUTF(trainerKey);out.writeBoolean(expandedItems);out.writeInt(classicVolume);out.writeInt(classicContrast);out.writeInt(0x50425731);out.writeUTF(battleSession);out.writeUTF(battlePeer);out.writeBoolean(battlePaid);out.writeBoolean(battleDone);out.writeBoolean(battleRewarded);out.writeInt(battleRewardChoice);out.writeInt(battleWinner);out.flush();
+            out.writeLong(sensorElapsed);out.writeBoolean(revoked);out.writeBoolean(returnPending);out.writeUTF(trainerKey);out.writeBoolean(expandedItems);out.writeInt(classicVolume);out.writeInt(classicContrast+10);out.writeInt(0x50425731);out.writeUTF(battleSession);out.writeUTF(battlePeer);out.writeBoolean(battlePaid);out.writeBoolean(battleDone);out.writeBoolean(battleRewarded);out.writeInt(battleRewardChoice);out.writeInt(battleWinner);out.flush();
             return bytes.toByteArray();
     }
     void save() throws IOException {

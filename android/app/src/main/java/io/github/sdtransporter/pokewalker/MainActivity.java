@@ -191,7 +191,7 @@ public final class MainActivity extends Activity {
         if(!page.equals("classic"))return;
         synchronized(WalkerStore.LOCK){
             if(!state.profileId.equals(classicProfile)||!state.active()||state.returnPending||state.syncing||!state.error.isEmpty()){handler.removeCallbacks(classicClock);stopClassicAudio();home();return;}
-            byte[] before=state.data.clone();
+            byte[] before=state.data.clone();classic[39]=java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis())/1000;
             Native.classicInput(state.data,classic,button,Native.now(),SystemClock.elapsedRealtime(),state.expandedItems);
             boolean controlsChanged=state.classicVolume!=classic[19]||state.classicContrast!=classic[20];
             state.classicVolume=classic[19];state.classicContrast=classic[20];
@@ -712,14 +712,19 @@ public final class MainActivity extends Activity {
             for(int n=0;n<4;n++){paint.setColor(n<hpWild?0xff232b1d:0xff99b484);c.drawRect(x+(8+n*6)*scale,y+54*scale,x+(12+n*6)*scale,y+57*scale,paint);paint.setColor(n<hpPlayer?0xff232b1d:0xff99b484);c.drawRect(x+(56+n*6)*scale,y+54*scale,x+(60+n*6)*scale,y+57*scale,paint);}
         }
         /** Which original Pokewalker screen the LCD shows for the current app page (VIEW ids match shared/walkerclassic.c). */
+        /** Ten contrast steps (0 faint ... 9 dark) blended between the light, normal and dark LCD palettes. */
+        private int[] contrastPalette(int level){
+            int[][] shades={{0xffb4b7aa,0xff9a9f91,0xff787e6f,0xff535b4b},{0xffb4b7aa,0xff8d9383,0xff555e4c,0xff232b1d},{0xffb4b7aa,0xff7f8675,0xff3e4835,0xff10180d}};
+            float t=Math.max(0,Math.min(9,level))/9f*2f;int low=t>=1?1:0;float k=t-low;int[] out=new int[4];
+            for(int n=0;n<4;n++){int a=shades[low][n],b=shades[low+1][n],c=0xff000000;for(int shift=0;shift<=16;shift+=8)c|=Math.round(((a>>shift)&255)*(1-k)+((b>>shift)&255)*k)<<shift;out[n]=c;}
+            return out;
+        }
         private int[] lcdScene(){
             int[] s=new int[40];s[19]=state.classicVolume;s[20]=state.classicContrast;
             switch(page){
             case "radar":s[0]=2;s[1]=Math.max(0,Math.min(3,lcdCursor));s[2]=target<0?0:1;s[3]=encounter;s[4]=Math.max(0,target);s[5]=round;break;
             case "dowsing":s[0]=3;s[1]=Math.max(0,Math.min(5,lcdCursor));s[2]=empty>=0&&attempts>0?4:0;s[4]=Math.max(0,hidden);s[6]=attempts;s[7]=empty;break;
             case "settings":s[0]=7;break;
-            case "pack":s[0]=5;break;
-            case "card":s[0]=6;break;
             case "connect":case "nearby":case "sync":s[0]=8;break;
             case "connectProfiles":s[0]=8;s[1]=1;break;
             default:break;
@@ -747,8 +752,7 @@ public final class MainActivity extends Activity {
                 if(page.equals("battle")&&battle!=null&&state.data!=null)drawBattle(canvas,lcd.left,lcd.top,lcd.right,lcd.bottom);
                 else if(pixels!=null){
                     float scale=Math.min(lcd.width()/96,lcd.height()/64),x=lcd.centerX()-48*scale,y=lcd.centerY()-32*scale;
-                    int[][] shades={{0xffb4b7aa,0xff9a9f91,0xff787e6f,0xff535b4b},{0xffb4b7aa,0xff8d9383,0xff555e4c,0xff232b1d},{0xffb4b7aa,0xff7f8675,0xff3e4835,0xff10180d}};
-                    int[] colors=shades[Math.max(0,Math.min(2,state.classicContrast))];paint.setAntiAlias(false);paint.setFilterBitmap(false);
+                    int[] colors=contrastPalette(state.classicContrast);paint.setAntiAlias(false);paint.setFilterBitmap(false);
                     for(int py=0;py<64;py++)for(int px=0;px<96;px++){
                         paint.setColor(colors[pixels[py*96+px]&3]);
                         canvas.drawRect(Math.round(x+px*scale),Math.round(y+py*scale),Math.round(x+(px+1)*scale),Math.round(y+(py+1)*scale),paint);

@@ -18,6 +18,7 @@ enum { RADAR_DELAY,RADAR_ACTIVE,RADAR_REVEAL,RADAR_CLOSING,RADAR_ESCAPED };
 enum { DOWSE_SELECT,DOWSE_REVEAL,DOWSE_FOUND,DOWSE_EMPTY,DOWSE_HINT };
 enum { LCD_FRAME_MS=250 };
 enum { BATTLE_ENCOUNTER_SCORE=10 };
+enum { BPHASE=26,BSTART,BCODE,BACT,BPASS,BHPVIS,BWATTS,INVFRIEND,TRAINDAYS,CLOCK_NOW=37,CLOCK_MS,CLOCK_TZ };
 static const unsigned radarWindows[]={64,48,32,24};
 static const unsigned radarDelays[]={16,32,48};
 static unsigned pollTime(unsigned polls){return polls*1000/32;}
@@ -46,7 +47,8 @@ static void battleStart(const uint8_t *ee,int32_t *s,uint32_t ms){
     WalkerBattle b;walkerBattleStart(&b,(unsigned)s[CHOICE]);
     s[BAT]=b.playerHp;s[BAT+1]=b.enemyHp;s[BAT+2]=b.row;s[BAT+3]=b.finished;
     s[BAT+4]=b.caught;s[BAT+5]=b.encounter;s[BAT+6]=b.lastOutcome;
-    s[VIEW]=BATTLE;s[SUB]=0;s[ANIM]=ms;s[LAST_ACTION]=-1;s[SOUND]=BATTLE_ENCOUNTER_SCORE+1;
+    s[VIEW]=BATTLE;s[SUB]=0;s[ANIM]=-1;s[LAST_ACTION]=-1;s[SOUND]=BATTLE_ENCOUNTER_SCORE+1;
+    s[BPHASE]=0;s[BSTART]=(int32_t)ms;s[BCODE]=s[BACT]=s[BPASS]=s[BHPVIS]=0;
     unsigned duration=s[VOLUME]?scoreDuration(ee,BATTLE_ENCOUNTER_SCORE):0;
     s[DEADLINE]=ms+(duration>650?duration:650);
 }
@@ -56,10 +58,187 @@ static void storeReward(uint8_t *ee,int32_t *s,int slot,uint32_t now){
     if(ok<0){s[VIEW]=PACK;s[SEL]=0;s[SUB]=1;s[SOUND]=2;} /* SUB=1: show the find before asking */
     else {s[REPLACE]=0;result(s,ok?item?2:1:3,ok?5:4);}
 }
+/* ---- Original battle (phases, timings and tables from the firmware reconstruction) ---- */
+enum { B_OPENING,B_ENCOUNTER,B_CHOOSE,B_PLAYER,B_OPPONENT,B_DEFEATED,B_WATTS,B_LEAVING,B_STARE,B_FAILED,
+       B_THROW,B_CLOSE,B_SETTLE,B_CHECK,B_PAUSE,B_STARS,B_CONFIRM,B_BREAK };
+enum { BATTLE_FRAME_MS=200 };
+enum { MSG_NO_ITEMS=22,MSG_CAPTURED=32,MSG_ESCAPE,MSG_DEFEAT,MSG_ATTACK,MSG_DODGE,MSG_CRITICAL,MSG_HIT,MSG_THROW,MSG_ALMOST,MSG_STARE,MSG_DROPPED };
+enum { SC_CONFIRM=0,SC_BACK=1,SC_MOVE=2,SC_FAILURE=4,SC_SUCCESS=7,SC_HIT=11,SC_DODGE=12,SC_CRITICAL=13,SC_ESCAPE=14,SC_THROW=15 };
+static const uint8_t bLimit[]={6,3,0,8,8,6,8,10,6,6,6,2,3,4,4,6,6,1};
+static const int8_t bEntrance[4]={-16,-4,8,8};
+static const int8_t bPlayerTurn[9][2]={{56,8},{56,8},{54,8},{52,8},{53,0},{54,0},{55,4},{56,8},{56,8}};
+static const int8_t bOpponentTurn[9][2]={{56,8},{56,8},{56,10},{56,12},{64,12},{64,11},{64,10},{60,9},{56,8}};
+static const uint8_t bWeights[5][3]={{45,35,20},{40,30,30},{50,40,10},{60,30,10},{20,30,50}};
+static const uint8_t bCapture[4]={0x61,0x4f,0x42,0x38};
+static unsigned bFrame(const int32_t *s,uint32_t ms){
+    unsigned f=(ms-(uint32_t)s[BSTART])/BATTLE_FRAME_MS,l=bLimit[s[BPHASE]];
+    return l&&f>l?l:f;
+}
+static void bGo(int32_t *s,int phase,uint32_t ms){s[BPHASE]=phase;s[BSTART]=(int32_t)ms;s[ANIM]=-1;}
+static void bLeave(int32_t *s,uint32_t ms){s[SOUND]=SC_ESCAPE+1;bGo(s,B_LEAVING,ms);}
+static void bHome(int32_t *s){s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;s[REPLACE]=0;}
+/* Advance the battle exactly like BattleUpdate: damage lands when an animation finishes. */
+static void battleStep(uint8_t *ee,int32_t *s,int button,uint32_t now,uint32_t ms){
+    int pressed=button>=0&&button<=2;
+    unsigned f=bFrame(s,ms),l=bLimit[s[BPHASE]];
+    int done=l&&f>=l;
+    switch(s[BPHASE]){
+    case B_OPENING:if(done)bGo(s,B_ENCOUNTER,ms);break;
+    case B_ENCOUNTER:
+        if(f>=3)s[BHPVIS]=1;
+        if(f>=3 && (int32_t)(ms-(uint32_t)s[DEADLINE])>=0 && pressed)bGo(s,B_CHOOSE,ms);
+        break;
+    case B_CHOOSE:{
+        if(!pressed)break;
+        unsigned roll=rnd(ee,100);const uint8_t *w=bWeights[s[BAT+2]%5];
+        int code=roll<w[2]?2:roll<(unsigned)w[2]+w[1]?1:0;
+        s[BCODE]=code;
+        if(button==0){s[BACT]=0;bGo(s,B_PLAYER,ms);}
+        else if(button==2){
+            s[BACT]=1;
+            if(code==2)bLeave(s,ms);
+            else if(code==1){s[SOUND]=SC_CONFIRM+1;bGo(s,B_STARE,ms);}
+            else bGo(s,B_OPPONENT,ms);
+        }else{s[SOUND]=SC_THROW+1;s[BPASS]=0;bGo(s,B_THROW,ms);}
+        break;}
+    case B_PLAYER:
+        if(f==4 && s[ANIM]!=4)s[SOUND]=(s[BCODE]==0?SC_HIT:s[BCODE]==1?SC_DODGE:SC_CRITICAL)+1;
+        if(!done)break;
+        if(s[BCODE]==1)bGo(s,B_OPPONENT,ms);
+        else{
+            int damage=s[BCODE]==2?2:1;
+            if(s[BAT+1]<=damage){s[BAT+1]=0;bLeave(s,ms);}
+            else{
+                s[BAT+1]-=damage;
+                if(s[BCODE]==0 && s[BACT]==1){s[BAT+2]=1;bGo(s,B_CHOOSE,ms);}
+                else bGo(s,B_OPPONENT,ms);
+            }
+        }
+        break;
+    case B_OPPONENT:
+        if(f==4 && s[ANIM]!=4)s[SOUND]=(s[BACT]==0?SC_HIT:SC_DODGE)+1;
+        if(!done)break;
+        if(s[BACT]==1){bGo(s,B_PLAYER,ms);break;}
+        if(--s[BAT]>0){s[BAT+2]=s[BCODE]==0?1:s[BCODE]==1?3:2;bGo(s,B_CHOOSE,ms);}
+        else{s[BAT]=0;bGo(s,B_DEFEATED,ms);}
+        break;
+    case B_DEFEATED:
+        if(done){
+            WalkerInfo info;unsigned lost=0;
+            if(walkerRead(ee,&info))lost=info.watts<10?info.watts:10;
+            if(lost)walkerSpend(ee,lost);
+            s[BWATTS]=(int32_t)lost;bGo(s,B_WATTS,ms);
+        }
+        break;
+    case B_WATTS:if(pressed){bHome(s);}break;
+    case B_STARE:if(done){s[BAT+2]=4;bGo(s,B_CHOOSE,ms);}break;
+    case B_LEAVING:if(pressed){s[SOUND]=SC_FAILURE+1;bHome(s);}break;
+    case B_THROW:if(done){s[BHPVIS]=0;bGo(s,B_CLOSE,ms);}break;
+    case B_CLOSE:if(done)bGo(s,B_SETTLE,ms);break;
+    case B_SETTLE:if(done)bGo(s,B_CHECK,ms);break;
+    case B_CHECK:
+        if(!done)break;
+        {unsigned roll=rnd(ee,100);int hp=s[BAT+1];
+         if(hp>=1&&hp<=4&&roll<bCapture[hp-1]){s[BPASS]++;bGo(s,B_PAUSE,ms);}
+         else bGo(s,B_BREAK,ms);}
+        break;
+    case B_PAUSE:
+        if(!done)break;
+        if(s[BPASS]<3)bGo(s,B_CHECK,ms);
+        else{s[SOUND]=SC_CONFIRM+1;bGo(s,B_STARS,ms);}
+        break;
+    case B_STARS:if(done){s[SOUND]=SC_SUCCESS+1;bGo(s,B_CONFIRM,ms);}break;
+    case B_CONFIRM:
+        if(done&&pressed){
+            s[BAT+4]=1;s[REPLACE]=1;storeReward(ee,s,-1,now);
+            if(s[VIEW]==RESULT){bHome(s);s[SOUND]=0;} /* stored: back to the main screen */
+        }
+        break;
+    case B_BREAK:if(done)bGo(s,B_FAILED,ms);break;
+    case B_FAILED:if(done)bLeave(s,ms);break;
+    }
+    if(s[VIEW]==BATTLE)s[ANIM]=(int32_t)f;
+}
+/* ---- Pokemon & items: original entry order and navigation ---- */
+static void invMasks(const uint8_t *ee,unsigned *walk,unsigned *friends){
+    WalkerInfo info;unsigned w=0,f=0;
+    if(walkerRead(ee,&info)&&info.hasPokemon)w|=1;
+    for(unsigned n=0;n<3;n++){if(walkerPokemonId(ee,n))w|=2u<<n;if(walkerItemId(ee,n))w|=1u<<(6+n);}
+    for(unsigned n=0;n<10;n++)if(walkerFriendItemId(ee,n))f|=1u<<n;
+    *walk=w;*friends=f;
+}
+static int invNext(int *idx,unsigned mask){
+    if(*idx==9)return 1;
+    int i=*idx+1;
+    for(int step=0;step<10;step++){if(mask&(1u<<i)){*idx=i;return 0;}if(i==9)return 1;i++;}
+    return 0;
+}
+static int invPrevious(int *idx,unsigned mask){
+    if(*idx==0)return 1;
+    (*idx)--;
+    for(int step=0;step<10;step++){if(mask&(1u<<*idx))return 0;if(*idx==0)return 1;(*idx)--;}
+    return 0;
+}
+static void invNextWrap(int *idx,unsigned mask){
+    *idx=(*idx+1)%10;
+    for(int step=0;step<10;step++){if(mask&(1u<<*idx))return;*idx=(*idx+1)%10;}
+}
+static void invPreviousWrap(int *idx,unsigned mask){
+    *idx=(*idx+9)%10;
+    for(int step=0;step<10;step++){if(mask&(1u<<*idx))return;*idx=(*idx+9)%10;}
+}
+static void packBrowse(uint8_t *ee,int32_t *s,int button){
+    unsigned w,f;invMasks(ee,&w,&f);int idx=s[SEL];
+    if(!s[INVFRIEND]){
+        if(button==0){
+            if(invPrevious(&idx,w)){s[VIEW]=MENU;s[SEL]=4;s[SOUND]=SC_BACK+1;}else s[SEL]=idx;
+        }else if(button==2){
+            if(invNext(&idx,w)){
+                if(f){idx=9;invNextWrap(&idx,f);s[INVFRIEND]=1;s[SEL]=idx;}else s[SOUND]=SC_BACK+1;
+            }else s[SEL]=idx;
+        }else{
+            if(f){idx=9;invNextWrap(&idx,f);s[INVFRIEND]=1;s[SEL]=idx;}else{s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;}
+            s[SOUND]=SC_CONFIRM+1;
+        }
+    }else{
+        if(button==0){
+            if(invPrevious(&idx,f)){if(w){idx=0;invPreviousWrap(&idx,w);s[INVFRIEND]=0;s[SEL]=idx;}else s[SOUND]=SC_BACK+1;}
+            else s[SEL]=idx;
+        }else if(button==2){
+            if(invNext(&idx,f))s[SOUND]=SC_BACK+1;else s[SEL]=idx;
+        }else{s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;s[INVFRIEND]=0;s[SOUND]=SC_CONFIRM+1;}
+    }
+}
+static void trainerInput(int32_t *s,int button,uint32_t total){
+    if(s[SUB]==0){
+        if(button==0){
+            if(s[TRAINDAYS]==0){s[VIEW]=MENU;s[SEL]=3;s[SOUND]=SC_BACK+1;}else s[TRAINDAYS]--;
+            return;
+        }
+        if(button==2){if(s[TRAINDAYS]<7)s[TRAINDAYS]++;return;}
+        s[SOUND]=SC_CONFIRM+1;
+        if(total<9999999u){s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;}else s[SUB]=1;
+        return;
+    }
+    if(button==1){s[SOUND]=SC_CONFIRM+1;s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;}
+}
+static void settingsInput(int32_t *s,int button){
+    if(s[SUB]==0){
+        if(button==0){if(s[SEL]==0){s[VIEW]=MENU;s[SEL]=5;s[SOUND]=SC_BACK+1;}else s[SEL]=0;}
+        else if(button==2)s[SEL]=1;
+        else{s[SUB]=s[SEL]+1;s[SOUND]=SC_CONFIRM+1;}
+        return;
+    }
+    if(button==1){s[SOUND]=SC_CONFIRM+1;s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;return;}
+    if(s[SUB]==1)s[VOLUME]=(s[VOLUME]+(button==0?2:1))%3;
+    else if(button==0){if(s[CONTRAST]>0)s[CONTRAST]--;else s[SOUND]=0;}
+    else{if(s[CONTRAST]<9)s[CONTRAST]++;else s[SOUND]=0;}
+}
 int walkerClassicInput(uint8_t *ee,int32_t s[40],int button,uint32_t now,uint32_t ms,int expanded){
     WalkerInfo info;if(!walkerRead(ee,&info)||!walkerCanWalk(ee))return 0;
     if(s[VIEW]<HOME||s[VIEW]>PEERS){memset(s,0,40*sizeof(*s));s[VOLUME]=2;s[CONTRAST]=1;}
-    s[SOUND]=0;
+    s[SOUND]=0;s[CLOCK_NOW]=(int32_t)now;s[CLOCK_MS]=(int32_t)ms;
+    if(s[VIEW]==BATTLE){battleStep(ee,s,button,now,ms);return 1;}
     if(s[VIEW]==RADAR && (int32_t)(ms-(uint32_t)s[RADAR_SOUND_UNTIL])<0)return 1;
     if(s[VIEW]==RADAR && s[SUB]!=RADAR_ESCAPED && (int32_t)(ms-(uint32_t)s[DEADLINE])>=0){
         if(s[SUB]==RADAR_DELAY){
@@ -121,7 +300,14 @@ int walkerClassicInput(uint8_t *ee,int32_t s[40],int button,uint32_t now,uint32_
             if(!walkerSpend(ee,3)){result(s,5,4);break;}
             s[VIEW]=DOWSE;s[SUB]=DOWSE_SELECT;s[TARGET]=(uint8_t)(walkerRandom(ee)>>5)%6;
             s[SEL]=0;s[TRIES]=2;s[EMPTY]=-1;
-        }else{s[VIEW]=s[SEL]==2?CONNECT:s[SEL]==3?TRAINER:s[SEL]==4?PACK:SETTINGS;s[SEL]=0;s[REPLACE]=0;}
+        }else{
+            s[VIEW]=s[SEL]==2?CONNECT:s[SEL]==3?TRAINER:s[SEL]==4?PACK:SETTINGS;s[SEL]=0;s[REPLACE]=0;s[TRAINDAYS]=0;s[INVFRIEND]=0;
+            if(s[VIEW]==PACK){
+                unsigned w,f;invMasks(ee,&w,&f);
+                if(!w&&!f)result(s,6,4);
+                else{int idx=9;s[INVFRIEND]=w==0;invNextWrap(&idx,w?w:f);s[SEL]=idx;}
+            }
+        }
         break;
     case RADAR:
         if(s[SUB]==RADAR_ESCAPED){s[VIEW]=HOME;s[SOUND]=1;break;}
@@ -156,40 +342,17 @@ int walkerClassicInput(uint8_t *ee,int32_t s[40],int button,uint32_t now,uint32_
         if(s[SEL]==s[EMPTY]){s[SOUND]=2;break;}
         s[SUB]=DOWSE_REVEAL;s[ANIM]=ms;s[DEADLINE]=ms+4*LCD_FRAME_MS;s[SOUND]=1;
         break;
-    case BATTLE:{
-        unsigned elapsed=ms-(uint32_t)s[ANIM];
-        if(s[SUB]==0){
-            if((int32_t)(ms-(uint32_t)s[DEADLINE])<0){s[SOUND]=0;break;}
-            s[SUB]=1;s[SOUND]=1;break;
-        }
-        if(s[LAST_ACTION]>=0 && elapsed<650u){s[SOUND]=0;break;}
-        WalkerBattle b={s[BAT],s[BAT+1],s[BAT+2],s[BAT+3],s[BAT+4],(unsigned)s[BAT+5],s[BAT+6]};
-        const int action=button==0?0:button==1?2:1;
-        s[PREV_HP]=b.playerHp;s[PREV_ENEMY]=b.enemyHp;s[LAST_ACTION]=action;s[ANIM]=ms;
-        walkerBattleAction(ee,&b,action);
-        s[BAT]=b.playerHp;s[BAT+1]=b.enemyHp;s[BAT+2]=b.row;s[BAT+3]=b.finished;
-        s[BAT+4]=b.caught;s[BAT+5]=b.encounter;s[BAT+6]=b.lastOutcome;
-        s[SOUND]=action==2?16:action==1?13:12;
-        if(b.caught){s[REPLACE]=1;storeReward(ee,s,-1,now);}
-        else if(b.finished)result(s,3,4);
-        break;}
+    case BATTLE:break; /* driven by battleStep above */
     case PACK:
         if(s[REPLACE] && s[SUB]==1){s[SUB]=0;s[SEL]=0;s[SOUND]=1;break;} /* any button: on to the slots */
         if(s[REPLACE]){
             if(button!=1){s[SEL]=(s[SEL]+(button==0?3:1))%4;break;}
             if(s[SEL]==3){s[REPLACE]=0;s[VIEW]=HOME;break;}
             storeReward(ee,s,s[SEL],now);
-        }else if(button==1){s[VIEW]=HOME;s[SOUND]=2;}
-        else s[SEL]=(s[SEL]+(button==0?15:1))%16;
+        }else packBrowse(ee,s,button);
         break;
-    case TRAINER:
-        if(button==1){s[VIEW]=HOME;s[SOUND]=2;}else s[SEL]=(s[SEL]+(button==0?3:1))%4;
-        break;
-    case SETTINGS:
-        if(button==1){s[SUB]=(s[SUB]+1)%3;if(s[SUB]==0)s[VIEW]=HOME;}
-        else if(s[SUB]==0)s[VOLUME]=(s[VOLUME]+(button==0?2:1))%3;
-        else s[CONTRAST]=(s[CONTRAST]+(button==0?2:1))%3;
-        break;
+    case TRAINER:trainerInput(s,button,info.totalSteps);break;
+    case SETTINGS:settingsInput(s,button);break;
     case CONNECT:
         if(button!=1)s[SEL]=(s[SEL]+1)%2;
         else {s[VIEW]=s[SEL]?PEERS:CONNECT;s[SUB]=s[SEL]?0:1;s[SOUND]=1;}
@@ -401,6 +564,235 @@ static void dowsingFrame(const uint8_t *ee,const int32_t *s,uint8_t *out,unsigne
     }
     }
 }
+/* ---- Original screen compositions (coordinates from the firmware reconstruction) ---- */
+enum { ART_BALL=0x460,ART_BALL_MASK=0x480,ART_TREASURE=0x488,ART_CURSORS=0x4f8,ART_LEFT=0x5b8,ART_RIGHT=0x5d8,ART_RETURN=0x5f8,
+       ART_MENU_LABELS=0x910,ART_TRAINER_ICON=0x1210,ART_TRAINER_NAME=0x1250,ART_COURSE_ICON=0x1390,ART_STEPS=0x13d0,
+       ART_TIME=0x1470,ART_DAYS=0x14f0,ART_TOTAL_DAYS=0x1590,ART_VOLUME=0x1690,ART_CONTRAST=0x1730,ART_SOUND_LEVELS=0x17d0,
+       ART_CONTRAST_SAMPLE=0x18f0,ART_ITEM_TREASURE=0x1910,ART_ITEM_PRESENT=0x1a90,ART_HIT=0x1e70,ART_CRITICAL=0x1ef0,
+       ART_CLOUD=0x1f70,ART_STAR=0x2040,ART_COLON=0x3c0,ART_HYPHEN=0x3e0,ART_WATTS=0x420,ART_HELD_NAME=0x993e,ART_COURSE_NAME=0x907e };
+enum { CURSOR_DOWN_ART=1,CURSOR_RIGHT_ART=3 };
+static void cursor(const uint8_t *ee,uint8_t *out,int direction,int variant,int x,int y){
+    raster(ee,out,ART_CURSORS+(variant+direction*3)*16,x,y,8,8,0);
+}
+/* A 96x16 band with the name frame the firmware draws behind an 80x16 name. */
+static void nameBand(const uint8_t *ee,uint8_t *out,unsigned address,int y,int edges,const char *fallback){
+    rect(out,0,y,96,16,0);
+    if(y==48)rect(out,0,y+15,96,1,3);else rect(out,0,y,96,1,3);
+    rect(out,0,y,1,16,3);rect(out,95,y,1,16,3);
+    if(address && hasArtwork(ee,address,320))drawRaster(ee,out,address,0,y,80,16,0,1);
+    else label(out,fallback,2,y+4);
+    if(edges&LCD_TOP)rect(out,0,y,80,1,3);
+    if(edges&LCD_BOTTOM)rect(out,0,y+15,80,1,3);
+    if(edges&LCD_LEFT)rect(out,0,y,1,16,3);
+    if(edges&LCD_RIGHT)rect(out,79,y,1,16,3);
+}
+static void enemyName(const uint8_t *ee,uint8_t *out,int index,int y,int edges){
+    char name[17];index=index<0||index>2?0:index;
+    snprintf(name,sizeof(name),"%.16s",speciesName(walkerRoutePokemonId(ee,(unsigned)index)));
+    nameBand(ee,out,LCD_ENCOUNTER_NAMES+index*320,y,edges,name);
+}
+static void heldName(const uint8_t *ee,uint8_t *out,int y,int edges){
+    WalkerInfo info;char name[17]="";
+    if(walkerRead(ee,&info))snprintf(name,sizeof(name),"%.16s",speciesName(info.species));
+    nameBand(ee,out,ART_HELD_NAME,y,edges,name);
+}
+static void numberRight(const uint8_t *ee,uint8_t *out,uint32_t value,int rightX,int y){
+    unsigned digits=1;for(uint32_t rest=value;rest>=10;rest/=10)digits++;
+    number(ee,out,value,rightX-(int)digits*8,y,(int)digits);
+}
+static void ballArt(const uint8_t *ee,uint8_t *out,int x,int y,int masked){
+    if(!hasArtwork(ee,ART_BALL,16)){
+        rect(out,x+1,y,6,8,3);rect(out,x,y+1,8,6,3);rect(out,x+2,y+2,4,4,0);rect(out,x+1,y+3,6,1,3);return;
+    }
+    if(!masked){drawRaster(ee,out,ART_BALL,x,y,8,8,0,1);return;}
+    for(int i=0;i<8;i++)for(int j=0;j<8;j++){
+        if(!(ee[ART_BALL_MASK+i]&(1u<<j)))continue;
+        unsigned n=ART_BALL+i*2,c=(((ee[n]>>j)&1)<<1)|((ee[n+1]>>j)&1);
+        pixel(out,x+i,y+j,c);
+    }
+}
+static void effectArt(const uint8_t *ee,uint8_t *out,unsigned address){
+    if(hasArtwork(ee,address,128)){drawRaster(ee,out,address,0x28,0,16,32,0,1);return;}
+    rect(out,47,6,3,19,3);rect(out,40,14,16,3,3);
+}
+static void battleRender(const uint8_t *ee,const int32_t *s,uint8_t *out,uint32_t ms){
+    int phase=s[BPHASE];unsigned f=bFrame(s,ms),sprite=(ms/LCD_FRAME_MS)&1,tick=ms/LCD_FRAME_MS;
+    int playerX=56,opponentX=8,code=s[BCODE],act=s[BACT],index=s[CHOICE];
+    if(phase==B_OPENING)opponentX=-32;
+    else if(phase==B_ENCOUNTER)opponentX=bEntrance[f>3?3:f];
+    else if(phase==B_PLAYER){playerX=bPlayerTurn[f>8?8:f][0];opponentX=bPlayerTurn[f>8?8:f][1];}
+    else if(phase==B_OPPONENT){playerX=bOpponentTurn[f>8?8:f][0];opponentX=bOpponentTurn[f>8?8:f][1];}
+    else if(phase==B_LEAVING)opponentX=f<=3?bEntrance[3-f]:-32;
+    raster(ee,out,0x91be + sprite*192,playerX,8,32,24,0);
+    for(int n=0;n<s[BAT];n++)raster(ee,out,LCD_HP,56+8*n,0,8,8,0);
+    if(s[BHPVIS])for(int n=0;n<s[BAT+1];n++)raster(ee,out,LCD_HP,8+8*n,24,8,8,0);
+    if(phase<=B_THROW)
+        raster(ee,out,0x9a7e + index*384+sprite*192,opponentX,0,32,24,!(ee[WALKER_ROUTE+0x52+index*16+14]&1));
+    switch(phase){
+    case B_OPENING:
+        if(f<3){int h=(3-(int)f)*8;rect(out,0,0,96,h,3);rect(out,0,64-h,96,h,3);}
+        break;
+    case B_ENCOUNTER:
+        if(f>=3 && (int32_t)(ms-(uint32_t)s[DEADLINE])>=0){
+            enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);
+            lcdMessage(ee,out,31,LCD_BOTTOM|LCD_SIDES,1,tick,"A WILD POKEMON!");
+        }
+        break;
+    case B_CHOOSE:
+        if(hasArtwork(ee,LCD_BATTLE_MENU,768))drawRaster(ee,out,LCD_BATTLE_MENU,0,32,96,32,0,1);
+        else{label(out,"ATK CATCH EVADE",2,47);label(out,"<    O    >",8,57);}
+        break;
+    case B_PLAYER:
+        if(code==0){
+            if(f==4)effectArt(ee,out,ART_HIT);
+            if(f>=4){heldName(ee,out,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ATTACK,LCD_BOTTOM|LCD_SIDES,0,tick,"ATTACKED!");}
+        }else if(code==1){
+            if(f>=4){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_DODGE,LCD_BOTTOM|LCD_SIDES,0,tick,"DODGED!");}
+        }else{
+            if(f==4)effectArt(ee,out,ART_CRITICAL);
+            if(f>=4){
+                lcdPanel(ee,out,LCD_MESSAGES+MSG_CRITICAL*384,32,LCD_TOP|LCD_SIDES,0,tick,"CRITICAL HIT!");
+                lcdMessage(ee,out,MSG_HIT,LCD_BOTTOM|LCD_SIDES,0,tick,"HIT!");
+            }
+        }
+        break;
+    case B_OPPONENT:
+        if(act==0){
+            if(f==4)effectArt(ee,out,ART_HIT);
+            if(f>=4){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ATTACK,LCD_BOTTOM|LCD_SIDES,0,tick,"ATTACKED!");}
+        }else if(f>=4){heldName(ee,out,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_DODGE,LCD_BOTTOM|LCD_SIDES,0,tick,"DODGED!");}
+        break;
+    case B_DEFEATED:
+        enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);
+        lcdMessage(ee,out,MSG_DEFEAT,LCD_BOTTOM|LCD_SIDES,0,tick,"YOU LOST!");
+        break;
+    case B_WATTS:{
+        rect(out,0,32,96,16,0);rect(out,0,32,96,1,3);rect(out,0,32,1,16,3);rect(out,95,32,1,16,3);
+        unsigned lost=(unsigned)s[BWATTS],digits=lost>=10?2:1;
+        number(ee,out,lost,2+(2-(int)digits)*8,32,(int)digits);
+        raster(ee,out,ART_WATTS,2+16+4,32,16,16,0);
+        lcdMessage(ee,out,MSG_DROPPED,LCD_BOTTOM|LCD_SIDES,1,tick,"WATTS DROPPED");
+        break;}
+    case B_STARE:lcdMessage(ee,out,MSG_STARE,LCD_BOX,0,tick,"A STARE-DOWN");break;
+    case B_LEAVING:
+        if(f>3){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ESCAPE,LCD_BOTTOM|LCD_SIDES,1,tick,"IT FLED!");}
+        break;
+    case B_THROW:{
+        int step=(int)f<<2;
+        static const int rise[7]={0,1,2,4,5,6,8};
+        int bx=0x2c-step,by=0x14-rise[f>6?6:f];
+        ballArt(ee,out,bx,by,1);
+        lcdMessage(ee,out,MSG_THROW,LCD_BOX,0,tick,"POKE BALL!");
+        break;}
+    case B_CLOSE:case B_BREAK:
+        if(hasArtwork(ee,ART_CLOUD,192))drawRaster(ee,out,ART_CLOUD,8,0,32,24,0,1);
+        else rect(out,12,4,24,16,3);
+        break;
+    case B_SETTLE:case B_PAUSE:ballArt(ee,out,0x14,0x0c,0);break;
+    case B_CHECK:{static const int xs[4]={0x13,0x14,0x15,0x14};ballArt(ee,out,xs[f&3],0x0c,0);break;}
+    case B_STARS:
+        ballArt(ee,out,0x14,0x0c,0);
+        if(hasArtwork(ee,ART_STAR,16)){
+            raster(ee,out,ART_STAR,0x0c-(int)f,0x0a-(int)f*2,8,8,0);raster(ee,out,ART_STAR,(int)f+0x1c,0x0c-(int)f*2,8,8,0);
+        }else{pixel(out,0x0c-(int)f+4,0x0a-(int)f*2+4,3);pixel(out,(int)f+0x1c+4,0x0c-(int)f*2+4,3);}
+        break;
+    case B_CONFIRM:
+        ballArt(ee,out,0x14,0x0c,0);
+        enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);
+        lcdMessage(ee,out,MSG_CAPTURED,LCD_BOTTOM|LCD_SIDES,1,tick,"CAUGHT!");
+        break;
+    case B_FAILED:lcdMessage(ee,out,MSG_ALMOST,LCD_BOX,0,tick,"ALMOST HAD IT!");break;
+    default:break;
+    }
+}
+static void inventoryRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32_t ms){
+    unsigned w,f;invMasks(ee,&w,&f);unsigned frame=(ms/LCD_FRAME_MS)&1;int idx=s[SEL];
+    raster(ee,out,ART_MENU_LABELS+4*320,8,0,80,16,0);
+    if(s[INVFRIEND]){
+        raster(ee,out,ART_LEFT,0,0,8,16,0);
+        drawRaster(ee,out,ART_ITEM_PRESENT,0x3c,0x18,32,24,0,1);
+        cursor(ee,out,CURSOR_DOWN_ART,(int)frame,(idx%5)*8+0x10,(idx/5)*0x10+0x10);
+        for(int n=0;n<10;n++)if(f&(1u<<n))raster(ee,out,ART_TREASURE,(n%5)*8+0x10,n<5?0x18:0x28,8,8,0);
+        unsigned id=walkerFriendItemId(ee,(unsigned)idx);char name[17];snprintf(name,sizeof(name),"%.16s",lcdItem(id));
+        int found=-1;for(int n=0;n<10;n++)if(walkerRouteItemId(ee,(unsigned)n)==id)found=n;
+        lcdPanel(ee,out,found>=0?LCD_ITEM_NAMES+384*found:0,48,LCD_BOX,0,frame,name);
+        return;
+    }
+    if(idx==0){drawRaster(ee,out,0x91be + frame*192,0x3c,0x18,32,24,0,1);heldName(ee,out,48,LCD_TOP|LCD_BOTTOM|LCD_LEFT);}
+    else if(idx<=3){
+        unsigned id=walkerPokemonId(ee,(unsigned)idx-1);int found=0;
+        for(int n=0;n<3;n++)if(walkerRoutePokemonId(ee,(unsigned)n)==id){found=n;break;}
+        drawRaster(ee,out,0x9a7e + found*384+frame*192,0x3c,0x18,32,24,0,1);
+        enemyName(ee,out,found,48,LCD_TOP|LCD_BOTTOM|LCD_LEFT);
+    }else if(idx>=6&&idx<=8){
+        unsigned id=walkerItemId(ee,(unsigned)idx-6);char name[17];snprintf(name,sizeof(name),"%.16s",lcdItem(id));
+        drawRaster(ee,out,ART_ITEM_TREASURE,0x3c,0x18,32,24,0,1);
+        int found=-1;for(int n=0;n<10;n++)if(walkerRouteItemId(ee,(unsigned)n)==id)found=n;
+        lcdPanel(ee,out,found>=0?LCD_ITEM_NAMES+384*found:0,48,LCD_BOX,0,frame,name);
+    }
+    cursor(ee,out,CURSOR_DOWN_ART,(int)frame,(idx%5)*8+0x10-(idx==0?8:0),(idx/5)*0x10+0x10);
+    raster(ee,out,ART_RETURN,0,0,8,16,0);
+    if(f)raster(ee,out,ART_RIGHT,0x58,0,8,16,0);
+    if(w&1)raster(ee,out,ART_BALL,8,0x18,8,8,0);
+    for(int n=0;n<3;n++){
+        if(w&(2u<<n))raster(ee,out,ART_BALL,n*8+0x18,0x18,8,8,0);
+        if(w&(1u<<(6+n)))raster(ee,out,ART_TREASURE,n*8+0x18,0x28,8,8,0);
+    }
+}
+static void digitRaster(const uint8_t *ee,uint8_t *out,unsigned digit,int x,int y){raster(ee,out,0x280+digit*32,x,y,8,16,0);}
+static void trainerRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32_t ms){
+    WalkerInfo info;if(!walkerRead(ee,&info))return;
+    if(s[SUB]==1){ /* step cap reached */
+        for(int n=0;n<7;n++)digitRaster(ee,out,9,n*8,8);
+        raster(ee,out,ART_STEPS,0x38,8,40,16,0);
+        lcdMessage(ee,out,67,LCD_BOX,1,0,"STEP LIMIT!");
+        return;
+    }
+    int days=s[TRAINDAYS];
+    if(days==0){
+        raster(ee,out,ART_MENU_LABELS+3*320,8,0,80,16,0);
+        raster(ee,out,ART_RETURN,0,0,8,16,0);raster(ee,out,ART_RIGHT,0x58,0,8,16,0);
+        raster(ee,out,ART_TRAINER_ICON,0,16,16,16,0);
+        if(hasArtwork(ee,ART_TRAINER_NAME,320))raster(ee,out,ART_TRAINER_NAME,16,16,80,16,0);else label(out,info.trainer,18,20);
+        raster(ee,out,ART_COURSE_ICON,0,32,16,16,0);
+        if(hasArtwork(ee,ART_COURSE_NAME,320))raster(ee,out,ART_COURSE_NAME,16,32,80,16,0);else label(out,info.route,18,36);
+        raster(ee,out,ART_TIME,0,48,32,16,0);
+        int64_t secs=((int64_t)s[CLOCK_NOW]+s[CLOCK_TZ]+(int64_t)((ms-(uint32_t)s[CLOCK_MS])/1000u))%86400;
+        if(secs<0)secs+=86400;
+        unsigned h=(unsigned)(secs/3600),m=(unsigned)(secs/60%60),sec=(unsigned)(secs%60);
+        digitRaster(ee,out,h/10,0x20,48);digitRaster(ee,out,h%10,0x28,48);raster(ee,out,ART_COLON,0x30,48,8,16,0);
+        digitRaster(ee,out,m/10,0x38,48);digitRaster(ee,out,m%10,0x40,48);raster(ee,out,ART_COLON,0x48,48,8,16,0);
+        digitRaster(ee,out,sec/10,0x50,48);digitRaster(ee,out,sec%10,0x58,48);
+        return;
+    }
+    const uint8_t *p=ee+0xcef0+(days-1)*4;
+    uint32_t daySteps=(uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];
+    unsigned totalDays=ee[0x162]<<8|ee[0x163];
+    raster(ee,out,ART_LEFT,0,0,8,16,0);
+    if(days<7)raster(ee,out,ART_RIGHT,0x58,0,8,16,0);
+    raster(ee,out,ART_DAYS,0x28,0,40,16,0);raster(ee,out,ART_HYPHEN,0x18,0,8,16,0);digitRaster(ee,out,(unsigned)days,0x20,0);
+    raster(ee,out,ART_TOTAL_DAYS,0,0x20,64,16,0);
+    raster(ee,out,ART_STEPS,0x38,0x10,40,16,0);raster(ee,out,ART_STEPS,0x38,0x30,40,16,0);
+    numberRight(ee,out,daySteps>9999999u?9999999u:daySteps,0x38,0x10);
+    numberRight(ee,out,totalDays,0x60,0x20);
+    numberRight(ee,out,info.totalSteps,0x38,0x30);
+}
+static void settingsRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32_t ms){
+    unsigned frame=(ms/LCD_FRAME_MS)&1;int page=s[SUB],selection=s[SEL]?1:0;
+    raster(ee,out,ART_MENU_LABELS+5*320,8,0,80,16,0);
+    raster(ee,out,ART_VOLUME,8,16,40,16,0);raster(ee,out,ART_CONTRAST,56,16,40,16,0);
+    if(page==0)cursor(ee,out,CURSOR_RIGHT_ART,(int)frame,selection*48,20);
+    else if(page==1){
+        cursor(ee,out,CURSOR_RIGHT_ART,2,selection*48,20);
+        cursor(ee,out,CURSOR_RIGHT_ART,(int)frame,s[VOLUME]*32,44);
+        for(int n=0;n<3;n++)raster(ee,out,ART_SOUND_LEVELS+n*96,8+n*32,40,24,16,0);
+    }else{
+        cursor(ee,out,CURSOR_DOWN_ART,(int)frame,s[CONTRAST]*8+8,32);
+        cursor(ee,out,CURSOR_RIGHT_ART,2,selection*48,20);
+        for(int n=0;n<10;n++)raster(ee,out,ART_CONTRAST_SAMPLE,n*8+8,40,8,16,0);
+    }
+    raster(ee,out,ART_RETURN,0,0,8,16,0);
+}
 void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],uint32_t ms){
     memset(out,0,6144);WalkerInfo i;if(!walkerRead(ee,&i))return;
     unsigned frame=(ms/400)&1;
@@ -425,33 +817,7 @@ void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],
     }else if(s[VIEW]==DOWSE){
         dowsingFrame(ee,s,out,ms/LCD_FRAME_MS);
     }else if(s[VIEW]==BATTLE){
-        unsigned battleFrame=ms/LCD_FRAME_MS;
-        int anim=s[LAST_ACTION]>=0 && (uint32_t)(ms-(uint32_t)s[ANIM])<600u;
-        int shift=anim?(int)((ms/70)%5):0;
-        raster(ee,out,0x9a7e + s[CHOICE]*384+(battleFrame&1)*192,8+shift,0,32,24,!(ee[WALKER_ROUTE+0x52+s[CHOICE]*16+14]&1));
-        raster(ee,out,0x91be + (battleFrame&1)*192,56-shift,8,32,24,0);
-        if(anim && s[LAST_ACTION]!=2){ /* impact sparks: on the wild Pokemon, then on yours when it hits back */
-            unsigned t=(uint32_t)(ms-(uint32_t)s[ANIM]);
-            int hit=0,cx=0,cy=0;
-            if(t>=150 && t<350 && s[PREV_ENEMY]>s[BAT+1]){hit=1;cx=24;cy=12;}
-            else if(t>=350 && t<600 && s[PREV_HP]>s[BAT]){hit=1;cx=72;cy=20;}
-            if(hit && ((t/60)&1)==0){
-                rect(out,cx-1,cy-7,3,15,3);rect(out,cx-7,cy-1,15,3,3);
-                for(int d=-4;d<=4;d+=2){pixel(out,cx+d,cy+d,3);pixel(out,cx+d,cy-d,3);}
-            }
-        }
-        for(int n=0;n<s[BAT];n++)raster(ee,out,LCD_HP,56+8*n,0,8,8,0);
-        for(int n=0;n<s[BAT+1];n++)raster(ee,out,LCD_HP,8+8*n,24,8,8,0);
-        if(s[SUB]==0){
-            rect(out,0,32,96,1,3);
-            rect(out,0,32,1,16,3);rect(out,95,32,1,16,3);
-            raster(ee,out,LCD_ENCOUNTER_NAMES+s[CHOICE]*320,0,32,80,16,0);
-            lcdMessage(ee,out,LCD_BATTLE_ENCOUNTER,LCD_BOTTOM|LCD_SIDES,1,battleFrame,"A WILD POKEMON!");
-        }else if(hasArtwork(ee,LCD_BATTLE_MENU,768)){
-            drawRaster(ee,out,LCD_BATTLE_MENU,0,32,96,32,0,1);
-        }else{
-            label(out,"ATK CATCH EVADE",2,47);label(out,"<    O    >",8,57);
-        }
+        battleRender(ee,s,out,ms);
     }else if(s[VIEW]==PACK && s[REPLACE] && s[SUB]==1){
         /* The pack is full: say what was found before asking which slot to replace. */
         char name[17];
@@ -466,6 +832,8 @@ void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],
             label(out,"PARTY FULL",0,38);
         }
         label(out,"PRESS A BUTTON",4,56);
+    }else if(s[VIEW]==PACK && !s[REPLACE]){
+        inventoryRender(ee,out,s,ms);
     }else if(s[VIEW]==PACK){
         label(out,s[REPLACE]?"REPLACE SLOT?":"INVENTORY",1,0);
         if(s[REPLACE] && s[SEL]==3)label(out,"LEAVE NEW FIND",3,25);
@@ -486,17 +854,13 @@ void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],
         }
         label(out,s[REPLACE]?"< SELECT >":"<   BACK   >",0,56);
     }else if(s[VIEW]==TRAINER){
-        label(out,s[SEL]==0?"TRAINER":s[SEL]==1?"COURSE":s[SEL]==2?"TODAY":"TOTAL STEPS",0,0);
-        if(s[SEL]==0){label(out,i.trainer,0,19);number(ee,out,i.trainerId,16,33,5);}
-        else if(s[SEL]==1)raster(ee,out,0x907e,8,24,80,16,0);
-        else number(ee,out,s[SEL]==2?i.todaySteps:i.totalSteps,8,24,7);
-        label(out,"<   BACK   >",0,56);
+        trainerRender(ee,out,s,ms);
     }else if(s[VIEW]==SETTINGS){
-        label(out,"SETTINGS",0,0);label(out,s[SUB]==0?"SOUND":"CONTRAST",0,20);number(ee,out,s[SUB]==0?s[VOLUME]:s[CONTRAST],40,33,1);label(out,"<   NEXT   >",0,56);
+        settingsRender(ee,out,s,ms);
     }else if(s[VIEW]==CONNECT || s[VIEW]==PEERS){
         raster(ee,out,0x2350,32,7,32,32,0);label(out,s[VIEW]==PEERS?"CHOOSE DEVICE":s[SEL]?"OTHER WALKER":"CONSOLE",1,43);label(out,"< CONNECT >",8,56);
     }else if(s[VIEW]==RESULT){
-        const char *message=s[RESULT_ID]==1?"CAUGHT!":s[RESULT_ID]==2?"ITEM FOUND!":s[RESULT_ID]==4?"NO POKEMON":s[RESULT_ID]==5?"NOT ENOUGH WATTS":"IT GOT AWAY!";
+        const char *message=s[RESULT_ID]==1?"CAUGHT!":s[RESULT_ID]==2?"ITEM FOUND!":s[RESULT_ID]==4?"NO POKEMON":s[RESULT_ID]==5?"NOT ENOUGH WATTS":s[RESULT_ID]==6?"NO ITEMS":"IT GOT AWAY!";
         label(out,message,0,6);
         if(s[RESULT_ID]==1)raster(ee,out,0x9a7e + s[CHOICE]*384+frame*192,32,21,32,24,0);
         if(s[RESULT_ID]==1){char name[17];snprintf(name,sizeof(name),"%.16s",speciesName(walkerRoutePokemonId(ee,s[CHOICE])));label(out,name,0,46);}
