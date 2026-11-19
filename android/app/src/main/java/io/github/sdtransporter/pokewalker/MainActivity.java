@@ -17,6 +17,7 @@ public final class MainActivity extends Activity {
     private WalkerStore state;
     private LinearLayout panel;
     private TextView stats, appTitle;
+    private LinearLayout countsRow;private long shownPokemon=-1,shownItems=-1;
     private WalkerPicture picture;
     private String page="home";
     private PhonePeerSession peerSession;
@@ -52,6 +53,9 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundColor(0xff0b1a28);
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(16),dp(12),dp(16),dp(20));scroll.addView(root);
         appTitle=text("Pokewalker",27,INK);root.addView(appTitle);picture=new WalkerPicture();root.addView(picture,new LinearLayout.LayoutParams(-1,dp(250)));
+        // Classic mode hides the stats block, so show the walker's own Pokémon and item icons with their counts here.
+        countsRow=new LinearLayout(this);countsRow.setOrientation(LinearLayout.HORIZONTAL);countsRow.setGravity(Gravity.CENTER_HORIZONTAL|Gravity.CENTER_VERTICAL);countsRow.setVisibility(View.GONE);
+        root.addView(countsRow,new LinearLayout.LayoutParams(-1,-2));
         stats=text("",18,MINT);root.addView(stats);
         panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);root.addView(panel);setContentView(scroll);
         // Keep controls clear of gesture navigation, system bars and cutouts.
@@ -142,8 +146,24 @@ public final class MainActivity extends Activity {
                 if(any)text.append("\n");
                 stats.setText(text.append(mode));
             }
+            updateCounts();
             picture.invalidate();
         }
+    }
+    private void updateCounts(){
+        long pokemon=0,items=0;
+        if(state.data!=null&&!state.returnPending){long[] i=Native.info(state.data);pokemon=i[Native.POKEMON_COUNT];items=i[Native.ITEM_COUNT];}
+        if(pokemon!=shownPokemon||items!=shownItems){
+            shownPokemon=pokemon;shownItems=items;countsRow.removeAllViews();
+            long[] counts={pokemon,items};int[] kinds={1,3};
+            for(int n=0;n<2;n++)if(counts[n]>0){
+                android.widget.ImageView icon=new android.widget.ImageView(this);icon.setImageDrawable(new PixelMenuIcon(this,kinds[n]));
+                icon.setContentDescription(n==0?"Pokémon held":"Items held");
+                countsRow.addView(icon,new LinearLayout.LayoutParams(dp(36),dp(36)));
+                TextView number=text(String.valueOf(counts[n]),24,INK);number.setPadding(dp(8),0,dp(28),0);countsRow.addView(number);
+            }
+        }
+        countsRow.setVisibility(classicOnly&&page.equals("classic")&&countsRow.getChildCount()>0?View.VISIBLE:View.GONE);
     }
     private void stopClassicAudio(){if(classicAudio!=null){classicAudio.release();classicAudio=null;}}
     private void playClassicScore(int score,int volume){
@@ -179,7 +199,7 @@ public final class MainActivity extends Activity {
         picture.getLayoutParams().height=dp(360);picture.requestLayout();
         Switch toggle=new Switch(this);toggle.setText("Classic mode");toggle.setTextColor(INK);toggle.setTextSize(18);toggle.setChecked(classicOnly);
         panel.addView(toggle,new LinearLayout.LayoutParams(-1,dp(56)));
-        toggle.setOnCheckedChangeListener((view,enabled)->{classicOnly=enabled;renderClassicControls();});
+        toggle.setOnCheckedChangeListener((view,enabled)->{classicOnly=enabled;renderClassicControls();updateCounts();});
         if(!classicOnly){
             LinearLayout controls=patchRow();patch(controls,"◀",()->classicPress(0));Button centre=patch(controls,"●",()->classicPress(1));patch(controls,"▶",()->classicPress(2));
             final boolean[] held={false};
