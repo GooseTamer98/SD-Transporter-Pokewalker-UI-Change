@@ -393,6 +393,13 @@ static void number(const uint8_t *ee,uint8_t *out,uint32_t value,int x,int y,int
     unsigned length=(unsigned)strlen(text);if(length>10)return;
     for(unsigned n=0;n<length;n++)raster(ee,out,0x280+(text[n]-'0')*32,x+n*8,y,8,16,0);
 }
+/* Pokemon names are drawn in capitals on the original LCD (GEODUDE), unlike its sentence-case messages. */
+static const char *speciesCaps(unsigned id){
+    static char buffer[2][24];static unsigned slot;
+    char *out=buffer[slot++&1];const char *name=speciesName(id);unsigned n=0;
+    for(;name[n]&&n<23;n++)out[n]=name[n]>='a'&&name[n]<='z'?(char)(name[n]-32):name[n];
+    out[n]=0;return out;
+}
 /* Small plain labels only where custom app features have no uploaded label. */
 static void label(uint8_t *out,const char *text,int x,int y){
     static const char chars[]=" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:-/!?.abcdefghijklmnopqrstuvwxyz'";
@@ -610,12 +617,12 @@ static void nameBand(const uint8_t *ee,uint8_t *out,unsigned address,int y,int e
 }
 static void enemyName(const uint8_t *ee,uint8_t *out,int index,int y,int edges){
     char name[17];index=index<0||index>2?0:index;
-    snprintf(name,sizeof(name),"%.16s",speciesName(walkerRoutePokemonId(ee,(unsigned)index)));
+    snprintf(name,sizeof(name),"%.16s",speciesCaps(walkerRoutePokemonId(ee,(unsigned)index)));
     nameBand(ee,out,LCD_ENCOUNTER_NAMES+index*320,y,edges,name);
 }
 static void heldName(const uint8_t *ee,uint8_t *out,int y,int edges){
     WalkerInfo info;char name[17]="";
-    if(walkerRead(ee,&info))snprintf(name,sizeof(name),"%.16s",speciesName(info.species));
+    if(walkerRead(ee,&info))snprintf(name,sizeof(name),"%.16s",speciesCaps(info.species));
     nameBand(ee,out,ART_HELD_NAME,y,edges,name);
 }
 static void numberRight(const uint8_t *ee,uint8_t *out,uint32_t value,int rightX,int y){
@@ -827,7 +834,7 @@ static void discardRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32
         if(pokemon){
             raster(ee,out,0x9a7e + s[CHOICE]*384+frame*192,0,0,32,24,0);
             nameBand(ee,out,LCD_ENCOUNTER_NAMES+s[CHOICE]*320,26,LCD_TOP|LCD_BOTTOM|LCD_LEFT,
-                     (snprintf(name,sizeof(name),"%.12s",speciesName(walkerRoutePokemonId(ee,(unsigned)s[CHOICE]))),name));
+                     (snprintf(name,sizeof(name),"%.12s",speciesCaps(walkerRoutePokemonId(ee,(unsigned)s[CHOICE]))),name));
         }else{
             drawRaster(ee,out,ART_ITEM_TREASURE,0,0,32,24,0,0);
             snprintf(name,sizeof(name),"%.12s",lcdItem(walkerRouteItemId(ee,(unsigned)s[CHOICE])));
@@ -1028,8 +1035,8 @@ int walkerFriendlyTurn(const uint8_t *a,const uint8_t *b,int32_t s[24],unsigned 
 void walkerFriendlyFrame(const uint8_t *a,const uint8_t *b,const int32_t s[24],unsigned side,unsigned selected,uint8_t out[6144],uint32_t ms){
     memset(out,0,6144);if(side>1||selected>3)return;
     const uint8_t *own=side?b:a,*peer=side?a:b;unsigned frame=(ms/400)&1,other=side^1;
-    char text[16];snprintf(text,sizeof(text),"%.6s",speciesName(own[WALKER_ROUTE]|own[WALKER_ROUTE+1]<<8));label(out,text,54,0);
-    snprintf(text,sizeof(text),"%.6s",speciesName(peer[WALKER_ROUTE]|peer[WALKER_ROUTE+1]<<8));label(out,text,0,0);
+    char text[16];snprintf(text,sizeof(text),"%.6s",speciesCaps(own[WALKER_ROUTE]|own[WALKER_ROUTE+1]<<8));label(out,text,54,0);
+    snprintf(text,sizeof(text),"%.6s",speciesCaps(peer[WALKER_ROUTE]|peer[WALKER_ROUTE+1]<<8));label(out,text,0,0);
     rect(out,1,9,39,4,1);rect(out,56,9,39,4,1);rect(out,1,9,(s[other]*39+99)/100,4,3);rect(out,56,9,(s[side]*39+99)/100,4,3);
     int motion=(int)((ms/100)%3)-1;
     raster(peer,out,0x91be + frame*192,4+motion,17,32,24,!(peer[WALKER_ROUTE+14]&1));
