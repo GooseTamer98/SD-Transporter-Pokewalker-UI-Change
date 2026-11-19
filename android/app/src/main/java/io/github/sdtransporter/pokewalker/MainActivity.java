@@ -131,7 +131,16 @@ public final class MainActivity extends Activity {
             else {
                 long[] i=Native.info(state.data);
                 String mode=state.revoked?"Session revoked":state.returnPending?"Return pending · phone copy locked":state.mode==2?"Phone pedometer":state.mode==1?"Time-based":"Walking paused";
-                stats.setText((i[Native.HAS_POKEMON]!=0?Native.species((int)i[Native.SPECIES])+" · Lv "+i[Native.LEVEL]:"No partner · send a Pokémon from HGSS")+"\n"+i[Native.STROLL]+" steps · "+i[Native.WATTS]+" watts\n"+Native.text(state.data,2)+"\nItems: "+packSummary(true)+"\nCaught: "+packSummary(false)+"\n"+mode);
+                android.text.SpannableStringBuilder text=new android.text.SpannableStringBuilder((i[Native.HAS_POKEMON]!=0?Native.species((int)i[Native.SPECIES])+" · Lv "+i[Native.LEVEL]:"No partner · send a Pokémon from HGSS")+"\n"+i[Native.STROLL]+" steps · "+i[Native.WATTS]+" watts\n"+Native.text(state.data,2)+"\n");
+                // Like the classic home screen: a Poké Ball and a treasure icon, shown only when you hold some, with how many.
+                long[] counts={i[Native.POKEMON_COUNT],i[Native.ITEM_COUNT]};int[] kinds={1,3};boolean any=false;
+                for(int n=0;n<2;n++)if(counts[n]>0){
+                    PixelMenuIcon icon=new PixelMenuIcon(this,kinds[n]);icon.setBounds(0,0,dp(24),dp(24));
+                    int at=text.length();text.append(" ");text.setSpan(new android.text.style.ImageSpan(icon,android.text.style.ImageSpan.ALIGN_BOTTOM),at,at+1,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    text.append(" "+counts[n]+"    ");any=true;
+                }
+                if(any)text.append("\n");
+                stats.setText(text.append(mode));
             }
             picture.invalidate();
         }
