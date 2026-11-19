@@ -17,13 +17,13 @@ import java.nio.charset.StandardCharsets;
 public final class PrivacyActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
-        Button back=new Button(this);back.setText("Back");back.setOnClickListener(v->finish());root.addView(back);
+        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(0xffeceae4);
+        Button back=new Button(this);back.setText("◀ BACK");back.setAllCaps(false);back.setTypeface(android.graphics.Typeface.MONOSPACE,android.graphics.Typeface.BOLD);back.setTextColor(0xff232b1d);back.setBackgroundColor(0xffb4b7aa);back.setOnClickListener(v->finish());root.addView(back);
         boolean showCredits = getIntent().getBooleanExtra("credits", false);
         if (showCredits) {
             TextView version = new TextView(this);
             version.setText("Version " + BuildConfig.VERSION_NAME);
-            version.setTextSize(16);
+            version.setTextSize(16);version.setTextColor(0xff232b1d);version.setTypeface(android.graphics.Typeface.MONOSPACE);
             int padding = (int)(16 * getResources().getDisplayMetrics().density);
             version.setPadding(padding, padding / 2, padding, padding / 2);
             root.addView(version);

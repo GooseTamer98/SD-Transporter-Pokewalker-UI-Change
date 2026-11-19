@@ -13,7 +13,10 @@ import java.io.*;
 import java.net.*;
 import java.security.SecureRandom;
 public final class MainActivity extends Activity {
-    private static final int INK=0xffe9f6f0,MUTED=0xff9ebeb7,MINT=0xff44ddb3,GOLD=0xfffcca66,PANEL=0xff17303b;
+    // Pokewalker palette: LCD gray-green with near-black pixels on a white/red shell.
+    static final int LCD=0xffb4b7aa,LCD_DARK=0xff9a9f91,PIXEL=0xff232b1d,PIXEL_SOFT=0xff555e4c,SHELL=0xffeceae4,RED=0xffd8283a,BEZEL=0xff111111;
+    private static final int INK=PIXEL,MUTED=PIXEL_SOFT,MINT=PIXEL,GOLD=PIXEL,PANEL=LCD;
+    private static final android.graphics.Typeface PIXEL_FONT=android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE,android.graphics.Typeface.BOLD);
     private WalkerStore state;
     private LinearLayout panel;
     private TextView stats, appTitle;
@@ -46,11 +49,11 @@ public final class MainActivity extends Activity {
     private final Runnable redraw=new Runnable(){public void run(){if(syncBusy&&!state.syncing){syncBusy=false;home();startTracking(false);}updateHeader();handler.postDelayed(this,500);}};
     @Override public void onCreate(Bundle bundle){
         super.onCreate(bundle);state=WalkerStore.get(this);
-        getWindow().setStatusBarColor(0xff0b1a28);getWindow().setNavigationBarColor(0xff0b1a28);
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundColor(0xff0b1a28);
+        getWindow().setStatusBarColor(RED);getWindow().setNavigationBarColor(SHELL);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundColor(SHELL);
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(16),dp(12),dp(16),dp(20));scroll.addView(root);
-        appTitle=text("Pokewalker",27,INK);root.addView(appTitle);picture=new WalkerPicture();root.addView(picture,new LinearLayout.LayoutParams(-1,dp(250)));
-        stats=text("",18,MINT);root.addView(stats);
+        appTitle=text("POKéWALKER",24,0xffffffff);appTitle.setGravity(Gravity.CENTER);appTitle.setBackground(box(RED,BEZEL,0,2));appTitle.setPadding(dp(8),dp(8),dp(8),dp(8));root.addView(appTitle,new LinearLayout.LayoutParams(-1,-2));picture=new WalkerPicture();root.addView(picture,new LinearLayout.LayoutParams(-1,dp(250)));
+        stats=text("",16,PIXEL);stats.setBackground(box(LCD,BEZEL,0,3));stats.setPadding(dp(12),dp(10),dp(12),dp(10));LinearLayout.LayoutParams statsLp=new LinearLayout.LayoutParams(-1,-2);statsLp.topMargin=dp(10);root.addView(stats,statsLp);
         panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);root.addView(panel);setContentView(scroll);
         // Keep controls clear of gesture navigation, system bars and cutouts.
         scroll.setOnApplyWindowInsetsListener((view,insets)->{
@@ -84,18 +87,34 @@ public final class MainActivity extends Activity {
     @Override protected void onPause(){handler.removeCallbacks(imageHold);pressedImageButton=-1;handler.removeCallbacks(classicClock);stopClassicAudio();super.onPause();}
     @Override protected void onDestroy(){handler.removeCallbacks(redraw);handler.removeCallbacks(classicClock);stopClassicAudio();if(peerSession!=null)peerSession.close();pendingPeerPermission=null;generation++;super.onDestroy();}
     private int dp(float x){return (int)(x*getResources().getDisplayMetrics().density+.5f);}
-    private TextView text(String s,int size,int color){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setPadding(0,dp(5),0,dp(5));return v;}
-    private void heading(String title){appTitle.setVisibility(View.VISIBLE);stats.setVisibility(View.VISIBLE);picture.getLayoutParams().height=dp(page.equals("radar")||page.equals("dowsing")?260:320);picture.requestLayout();panel.removeAllViews();panel.addView(text(title,23,INK));}
-    private void note(String message){panel.addView(text(message,17,MUTED));}
+    private TextView text(String s,int size,int color){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setTypeface(PIXEL_FONT);v.setPadding(0,dp(5),0,dp(5));return v;}
+    /** Flat LCD-style rectangle with a heavy pixel border (no rounded corners, like the real screen). */
+    private GradientDrawable box(int fill,int stroke,int radiusDp,int strokeDp){GradientDrawable d=new GradientDrawable();d.setColor(fill);d.setCornerRadius(dp(radiusDp));d.setStroke(dp(strokeDp),stroke);return d;}
+    /** Menu row that inverts (dark box, light text) while pressed or focused, like the Pokewalker's selection cursor. */
+    private android.graphics.drawable.StateListDrawable lcdRow(){
+        android.graphics.drawable.StateListDrawable s=new android.graphics.drawable.StateListDrawable();
+        GradientDrawable on=box(PIXEL,PIXEL,2,2),off=box(LCD,PIXEL,2,2);
+        s.addState(new int[]{android.R.attr.state_pressed},on);s.addState(new int[]{android.R.attr.state_focused},on);s.addState(new int[]{-android.R.attr.state_enabled},box(LCD_DARK,PIXEL_SOFT,2,2));s.addState(new int[]{},off);return s;
+    }
+    private void heading(String title){appTitle.setVisibility(View.VISIBLE);stats.setVisibility(View.VISIBLE);picture.getLayoutParams().height=dp(page.equals("radar")||page.equals("dowsing")?260:320);picture.requestLayout();panel.removeAllViews();TextView t=text("◀  "+title.toUpperCase(java.util.Locale.ROOT)+"  ▶",18,PIXEL);t.setGravity(Gravity.CENTER);t.setBackground(box(LCD,BEZEL,0,3));t.setPadding(dp(8),dp(10),dp(8),dp(10));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(12);panel.addView(t,lp);}
+    private void note(String message){TextView t=text(message,15,PIXEL);t.setPadding(dp(4),dp(6),dp(4),dp(2));panel.addView(t);}
     private Button button(String label,Runnable action){
-        Button b=new Button(this);b.setText(label);b.setTextSize(17);b.setTextColor(INK);b.setAllCaps(false);
-        GradientDrawable background=new GradientDrawable();background.setColor(PANEL);background.setCornerRadius(dp(12));b.setBackground(background);
+        Button b=new Button(this);b.setText(label);b.setTextSize(16);b.setTypeface(PIXEL_FONT);b.setAllCaps(false);b.setStateListAnimator(null);
+        b.setTextColor(new android.content.res.ColorStateList(new int[][]{{android.R.attr.state_pressed},{android.R.attr.state_focused},{}},new int[]{LCD,LCD,PIXEL}));
+        b.setBackground(lcdRow());
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(55));lp.topMargin=dp(8);panel.addView(b,lp);
         if(label.length()>2){b.setCompoundDrawablesWithIntrinsicBounds(new PixelMenuIcon(this,PixelMenuIcon.kind(label)),null,null,null);b.setCompoundDrawablePadding(dp(12));b.setPadding(dp(14),0,dp(14),0);b.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);}
         b.setOnClickListener(v->action.run());return b;
     }
     private Button patch(LinearLayout row,String label,Runnable action){
-        Button b=button(label,action);panel.removeView(b);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(60),1);lp.setMargins(dp(3),dp(4),dp(3),dp(4));row.addView(b,lp);return b;
+        Button b=button(label,action);panel.removeView(b);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(60),1);lp.setMargins(dp(3),dp(4),dp(3),dp(4));
+        if(label.length()<=2){ // the three physical keys: white domed buttons with a grey rim
+            android.graphics.drawable.StateListDrawable keys=new android.graphics.drawable.StateListDrawable();
+            keys.addState(new int[]{android.R.attr.state_pressed},box(0xffc9c7c0,0xff8a8982,30,3));keys.addState(new int[]{},box(0xfffbfaf7,0xffa9a8a1,30,3));
+            b.setBackground(keys);b.setTextColor(0xff8f8e88);b.setTextSize(22);b.setGravity(Gravity.CENTER);b.setPadding(0,0,0,0);
+            if(label.equals("●"))lp.setMargins(dp(3),dp(0),dp(3),dp(0));
+        }
+        row.addView(b,lp);return b;
     }
     private View grassPatch(LinearLayout row,int number,boolean rustling,boolean searched,Runnable action){
         GrassPatchView view=new GrassPatchView(this,number,rustling,searched);
@@ -156,7 +175,7 @@ public final class MainActivity extends Activity {
     private void renderClassicControls(){
         panel.removeAllViews();appTitle.setVisibility(classicOnly?View.GONE:View.VISIBLE);stats.setVisibility(classicOnly?View.GONE:View.VISIBLE);
         picture.getLayoutParams().height=dp(360);picture.requestLayout();
-        Switch toggle=new Switch(this);toggle.setText("Classic mode");toggle.setTextColor(INK);toggle.setTextSize(18);toggle.setChecked(classicOnly);
+        Switch toggle=new Switch(this);toggle.setText("Classic mode");toggle.setTextColor(INK);toggle.setTextSize(16);toggle.setTypeface(PIXEL_FONT);toggle.setChecked(classicOnly);
         panel.addView(toggle,new LinearLayout.LayoutParams(-1,dp(56)));
         toggle.setOnCheckedChangeListener((view,enabled)->{classicOnly=enabled;renderClassicControls();});
         if(!classicOnly){
@@ -447,7 +466,7 @@ public final class MainActivity extends Activity {
         },delay);
     }
     private void radarButtons(){
-        radarProgress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);radarProgress.setMax(1000);radarProgress.setProgress(target<0?0:1000);panel.addView(radarProgress,new LinearLayout.LayoutParams(-1,dp(12)));
+        radarProgress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);radarProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(PIXEL));radarProgress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(LCD_DARK));radarProgress.setMax(1000);radarProgress.setProgress(target<0?0:1000);panel.addView(radarProgress,new LinearLayout.LayoutParams(-1,dp(12)));
         final int progressEpoch=generation;final ProgressBar current=radarProgress;final long duration=Math.max(1,radarDeadline-SystemClock.elapsedRealtime());
         if(target>=0)handler.post(new Runnable(){public void run(){if(progressEpoch!=generation||!page.equals("radar")||radarProgress!=current)return;long left=radarDeadline-SystemClock.elapsedRealtime();current.setProgress((int)Math.max(0,Math.min(1000,left*1000/duration)));if(left>0)handler.postDelayed(this,40);}});
         LinearLayout row=null;
@@ -528,7 +547,7 @@ public final class MainActivity extends Activity {
         note("On the console, open Settings → Phone sync. Enter its IP address below. Keep the console app open on the same local Wi-Fi.");
         if(!syncFailure.isEmpty())note(syncFailure);
         if(!state.pendingToken.isEmpty()&&!state.active())note("An unfinished receive can be retried with the same console. If you force-unlocked it, retry once more after the old session is refused.");
-        EditText host=new EditText(this);host.setSingleLine(true);host.setTextColor(INK);host.setHintTextColor(MUTED);host.setHint("Console IP, e.g. 192.168.1.20");host.setText(state.host);panel.addView(host);
+        EditText host=new EditText(this);host.setSingleLine(true);host.setTextColor(INK);host.setHintTextColor(MUTED);host.setTypeface(PIXEL_FONT);host.setBackground(box(LCD,BEZEL,0,2));host.setPadding(dp(12),dp(10),dp(12),dp(10));host.setHint("Console IP, e.g. 192.168.1.20");host.setText(state.host);panel.addView(host);
         button("Saved consoles",()->showSavedConsoles(host));
         button("Save this console",()->saveConsole(host));
         button("Receive Pokémon from console",()->{
