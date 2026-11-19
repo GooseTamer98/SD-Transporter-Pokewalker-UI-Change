@@ -55,7 +55,7 @@ static void battleStart(const uint8_t *ee,int32_t *s,uint32_t ms){
 static void storeReward(uint8_t *ee,int32_t *s,int slot,uint32_t now){
     int item=s[REPLACE]==2;
     int ok=item?walkerStoreItem(ee,s[CHOICE],slot,now):walkerStorePokemon(ee,s[CHOICE],slot,now);
-    if(ok<0){s[VIEW]=PACK;s[SEL]=0;s[SUB]=1;s[SOUND]=2;} /* SUB=1: show the find before asking */
+    if(ok<0){s[VIEW]=PACK;s[SEL]=1;s[SUB]=0;s[SOUND]=0;} /* discard picker, starting on the middle slot */
     else {s[REPLACE]=0;result(s,ok?item?2:1:3,ok?5:4);}
 }
 /* ---- Original battle (phases, timings and tables from the firmware reconstruction) ---- */
@@ -234,6 +234,18 @@ static void settingsInput(int32_t *s,int button){
     else if(button==0){if(s[CONTRAST]>0)s[CONTRAST]--;else s[SOUND]=0;}
     else{if(s[CONTRAST]<9)s[CONTRAST]++;else s[SOUND]=0;}
 }
+/* Full party/pack: choose which slot to replace; leaving the new find asks first. */
+static void discardInput(uint8_t *ee,int32_t *s,int button,uint32_t now){
+    if(s[SUB]==1){ /* confirm: right = yes, leave it; anything else keeps it */
+        if(button==2){s[REPLACE]=0;s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;s[SOUND]=SC_BACK+1;}
+        else{s[SUB]=0;s[SOUND]=SC_BACK+1;}
+        return;
+    }
+    if(button==0){if(s[SEL]<=0){s[SUB]=1;s[SOUND]=SC_CONFIRM+1;}else s[SEL]--;return;}
+    if(button==2){if(s[SEL]>=2)s[SOUND]=SC_BACK+1;else s[SEL]++;return;}
+    storeReward(ee,s,s[SEL],now);
+    if(s[VIEW]==RESULT){s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;s[SOUND]=SC_CONFIRM+1;}
+}
 int walkerClassicInput(uint8_t *ee,int32_t s[40],int button,uint32_t now,uint32_t ms,int expanded){
     WalkerInfo info;if(!walkerRead(ee,&info)||!walkerCanWalk(ee))return 0;
     if(s[VIEW]<HOME||s[VIEW]>PEERS){memset(s,0,40*sizeof(*s));s[VOLUME]=2;s[CONTRAST]=1;}
@@ -282,33 +294,36 @@ int walkerClassicInput(uint8_t *ee,int32_t s[40],int button,uint32_t now,uint32_
     if(button>2)return 0;
     s[SOUND]=3;
     switch(s[VIEW]){
-    case HOME:s[VIEW]=MENU;s[SEL]=button==0?5:button==1?2:0;s[SOUND]=1;break;
+    case HOME:s[VIEW]=MENU;s[SUB]=0;s[SEL]=button==0?5:button==1?2:0;s[SOUND]=1;break;
     case MENU:
+        if(s[SUB]!=0){s[SUB]=0;s[SOUND]=SC_CONFIRM+1;break;} /* any button dismisses an error */
         if(button!=1){ /* moving past either end of the carousel returns to the main screen */
             if((button==0&&s[SEL]<=0)||(button==2&&s[SEL]>=5)){s[VIEW]=HOME;s[SEL]=0;s[SUB]=0;s[SOUND]=2;break;}
             s[SEL]+=button==0?-1:1;break;
         }
         s[SEL]=s[SEL]<0||s[SEL]>5?0:s[SEL];s[SUB]=0;s[SOUND]=1;
-        if(s[SEL]==0){
-            unsigned visitor=walkerPendingEncounter(ee);WalkerEncounter encounter;
-            if(!info.hasPokemon){result(s,4,4);break;}
-            if(visitor){s[CHOICE]=visitor-1;walkerClearEncounter(ee);battleStart(ee,s,ms);break;}
-            if(info.watts<10||!walkerChooseEncounter(ee,&encounter)){result(s,5,4);break;}
-            if(!walkerSpend(ee,10)){result(s,5,4);break;}
-            s[CHOICE]=encounter.index;s[ROUND]=0;s[TRIES]=3-(int)encounter.index+(int)rnd(ee,2);
-            s[VIEW]=RADAR;s[SEL]=0;s[SUB]=RADAR_DELAY;
-            s[TARGET]=(walkerRandom(ee)>>5)&3;s[DEADLINE]=ms+pollTime(5)+radarSound(ee,s,0,ms);
-        }else if(s[SEL]==1){
-            if(!info.hasPokemon){result(s,4,4);break;}
-            if(!walkerSpend(ee,3)){result(s,5,4);break;}
-            s[VIEW]=DOWSE;s[SUB]=DOWSE_SELECT;s[TARGET]=(uint8_t)(walkerRandom(ee)>>5)%6;
-            s[SEL]=0;s[TRIES]=2;s[EMPTY]=-1;
-        }else{
-            s[VIEW]=s[SEL]==2?CONNECT:s[SEL]==3?TRAINER:s[SEL]==4?PACK:SETTINGS;s[SEL]=0;s[REPLACE]=0;s[TRAINDAYS]=0;s[INVFRIEND]=0;
-            if(s[VIEW]==PACK){
+        {
+            const unsigned cost=s[SEL]==0?10u:s[SEL]==1?3u:0u;
+            if(info.watts<cost){s[SUB]=1;s[SOUND]=SC_FAILURE+1;break;}      /* not enough watts */
+            if(s[SEL]==0){
+                unsigned visitor=walkerPendingEncounter(ee);WalkerEncounter encounter;
+                if(!info.hasPokemon){s[SUB]=2;s[SOUND]=SC_FAILURE+1;break;} /* no Pokemon */
+                if(visitor){s[CHOICE]=visitor-1;walkerClearEncounter(ee);battleStart(ee,s,ms);break;}
+                if(!walkerChooseEncounter(ee,&encounter)||!walkerSpend(ee,10)){s[SUB]=2;s[SOUND]=SC_FAILURE+1;break;}
+                s[CHOICE]=encounter.index;s[ROUND]=0;s[TRIES]=3-(int)encounter.index+(int)rnd(ee,2);
+                s[VIEW]=RADAR;s[SEL]=0;s[SUB]=RADAR_DELAY;
+                s[TARGET]=(walkerRandom(ee)>>5)&3;s[DEADLINE]=ms+pollTime(5)+radarSound(ee,s,0,ms);
+            }else if(s[SEL]==1){
+                if(!walkerSpend(ee,3)){s[SUB]=1;s[SOUND]=SC_FAILURE+1;break;}
+                s[VIEW]=DOWSE;s[SUB]=DOWSE_SELECT;s[TARGET]=(uint8_t)(walkerRandom(ee)>>5)%6;
+                s[SEL]=0;s[TRIES]=2;s[EMPTY]=-1;
+            }else if(s[SEL]==4){
                 unsigned w,f;invMasks(ee,&w,&f);
-                if(!w&&!f)result(s,6,4);
-                else{int idx=9;s[INVFRIEND]=w==0;invNextWrap(&idx,w?w:f);s[SEL]=idx;}
+                if(!w&&!f){s[SUB]=3;s[SOUND]=SC_FAILURE+1;break;}         /* nothing to show */
+                int idx=9;invNextWrap(&idx,w?w:f);
+                s[VIEW]=PACK;s[REPLACE]=0;s[INVFRIEND]=w==0;s[SEL]=idx;
+            }else{
+                s[VIEW]=s[SEL]==2?CONNECT:s[SEL]==3?TRAINER:SETTINGS;s[SEL]=0;s[REPLACE]=0;s[TRAINDAYS]=0;s[INVFRIEND]=0;
             }
         }
         break;
@@ -347,12 +362,7 @@ int walkerClassicInput(uint8_t *ee,int32_t s[40],int button,uint32_t now,uint32_
         break;
     case BATTLE:break; /* driven by battleStep above */
     case PACK:
-        if(s[REPLACE] && s[SUB]==1){s[SUB]=0;s[SEL]=0;s[SOUND]=1;break;} /* any button: on to the slots */
-        if(s[REPLACE]){
-            if(button!=1){s[SEL]=(s[SEL]+(button==0?3:1))%4;break;}
-            if(s[SEL]==3){s[REPLACE]=0;s[VIEW]=HOME;break;}
-            storeReward(ee,s,s[SEL],now);
-        }else packBrowse(ee,s,button);
+        if(s[REPLACE])discardInput(ee,s,button,now);else packBrowse(ee,s,button);
         break;
     case TRAINER:trainerInput(s,button,info.totalSteps);break;
     case SETTINGS:settingsInput(s,button);break;
@@ -796,6 +806,58 @@ static void settingsRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint3
     }
     raster(ee,out,ART_RETURN,0,0,8,16,0);
 }
+static void discardRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32_t ms){
+    unsigned frame=(ms/LCD_FRAME_MS)&1;int pokemon=s[REPLACE]==1,slot=s[SEL]<0?0:s[SEL]>2?2:s[SEL];
+    if(s[SUB]==1){ /* are you sure you want to leave the new find behind? */
+        char name[17];
+        if(pokemon){
+            raster(ee,out,0x9a7e + s[CHOICE]*384+frame*192,8,0,32,24,0);
+            snprintf(name,sizeof(name),"%.16s",speciesName(walkerRoutePokemonId(ee,(unsigned)s[CHOICE])));
+            label(out,"LEAVE THE",46,3);label(out,"NEW CATCH?",46,13);
+            nameBand(ee,out,LCD_ENCOUNTER_NAMES+s[CHOICE]*320,26,LCD_TOP|LCD_BOTTOM|LCD_LEFT,name);
+        }else{
+            drawRaster(ee,out,ART_ITEM_TREASURE,8,0,32,24,0,0);
+            snprintf(name,sizeof(name),"%.16s",lcdItem(walkerRouteItemId(ee,(unsigned)s[CHOICE])));
+            label(out,"LEAVE THE",46,3);label(out,"NEW ITEM?",46,13);
+            lcdPanel(ee,out,LCD_ITEM_NAMES+384*s[CHOICE],26,LCD_BOX,0,frame,name);
+        }
+        label(out,"IT WILL BE LOST",4,44);
+        raster(ee,out,ART_LEFT,0,48,8,16,0);label(out,"NO",12,52);
+        label(out,"YES",66,52);raster(ee,out,ART_RIGHT,88,48,8,16,0);
+        return;
+    }
+    raster(ee,out,ART_RETURN,0,0,8,16,0);
+    if(hasArtwork(ee,0x8b30,320))raster(ee,out,0x8b30,8,0,80,16,0);else label(out,"REPLACE ONE?",10,4);
+    cursor(ee,out,CURSOR_DOWN_ART,(int)frame,slot*0x14+0x18,0x18);
+    for(int n=0;n<3;n++)raster(ee,out,pokemon?ART_BALL:ART_TREASURE,n*0x14+0x18,0x20,8,8,0);
+    char name[17];
+    if(pokemon){
+        unsigned id=walkerPokemonId(ee,(unsigned)slot);int found=0;
+        for(int n=0;n<3;n++)if(walkerRoutePokemonId(ee,(unsigned)n)==id){found=n;break;}
+        enemyName(ee,out,found,48,LCD_TOP|LCD_BOTTOM|LCD_LEFT);
+    }else{
+        unsigned id=walkerItemId(ee,(unsigned)slot);snprintf(name,sizeof(name),"%.16s",lcdItem(id));
+        int found=-1;for(int n=0;n<10;n++)if(walkerRouteItemId(ee,(unsigned)n)==id)found=n;
+        lcdPanel(ee,out,found>=0?LCD_ITEM_NAMES+384*found:0,48,LCD_BOX,0,frame,name);
+    }
+}
+static void menuRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32_t ms,const WalkerInfo *i){
+    static const uint8_t iconY[6]={8,11,13,13,11,8};
+    unsigned sel=s[SEL]>=0&&s[SEL]<6?(unsigned)s[SEL]:0,frame=(ms/LCD_FRAME_MS)&1;
+    raster(ee,out,ART_MENU_LABELS+sel*320,8,0,80,16,0);
+    for(unsigned n=0;n<6;n++){
+        raster(ee,out,0x1090+n*64,(int)n*16,16+iconY[n],16,16,0);
+        if(n==sel)cursor(ee,out,CURSOR_DOWN_ART,(int)frame,(int)n*16+4,16+iconY[n]-8);
+    }
+    if(s[SUB]==1)lcdMessage(ee,out,20,LCD_BOX,1,ms/LCD_FRAME_MS,"NOT ENOUGH WATTS");
+    else if(s[SUB]==2)lcdMessage(ee,out,21,LCD_BOX,1,ms/LCD_FRAME_MS,"NO POKEMON");
+    else if(s[SUB]==3)lcdMessage(ee,out,MSG_NO_ITEMS,LCD_BOX,1,ms/LCD_FRAME_MS,"NO ITEMS");
+    else{
+        numberRight(ee,out,i->watts,0x50,48);raster(ee,out,ART_WATTS,0x50,48,16,16,0);
+        if(sel<2){numberRight(ee,out,sel?3:10,0x10,48);raster(ee,out,ART_WATTS,0x18,48,16,16,0);raster(ee,out,0x400,0x28,48,8,16,0);}
+    }
+    raster(ee,out,ART_LEFT,0,0,8,16,0);raster(ee,out,ART_RIGHT,0x58,0,8,16,0);
+}
 void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],uint32_t ms){
     memset(out,0,6144);WalkerInfo i;if(!walkerRead(ee,&i))return;
     unsigned frame=(ms/400)&1;
@@ -810,52 +872,17 @@ void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],
         if(i.pokemonCount){walkerMenuIcon(1,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,x,48+y,3);}
         if(i.itemCount){walkerMenuIcon(3,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,20+x,48+y,3);}
     }else if(s[VIEW]==MENU){
-        unsigned sel=s[SEL]>=0&&s[SEL]<6?s[SEL]:0;
-        raster(ee,out,0x910+sel*320,8,0,80,16,0);
-        for(unsigned n=0;n<6;n++){raster(ee,out,0x1090+n*64,n*16,24,16,16,0);if(n==sel){pixel(out,n*16+7,18,3);rect(out,n*16+5,16,5,1,3);}}
-        if(sel<2)number(ee,out,sel?3:10,8,48,2);
-        number(ee,out,i.watts,44,48,4);raster(ee,out,0x420,80,48,16,16,0);
+        menuRender(ee,out,s,ms,&i);
     }else if(s[VIEW]==RADAR){
         radarFrame(ee,s,out,ms,ms/LCD_FRAME_MS);
     }else if(s[VIEW]==DOWSE){
         dowsingFrame(ee,s,out,ms/LCD_FRAME_MS);
     }else if(s[VIEW]==BATTLE){
         battleRender(ee,s,out,ms);
-    }else if(s[VIEW]==PACK && s[REPLACE] && s[SUB]==1){
-        /* The pack is full: say what was found before asking which slot to replace. */
-        char name[17];
-        if(s[REPLACE]==2){
-            label(out,"ITEM FOUND!",0,0);
-            snprintf(name,sizeof(name),"%.16s",lcdItem(walkerRouteItemId(ee,s[CHOICE])));label(out,name,0,17);
-            label(out,"PACK FULL",0,34);
-        }else{
-            label(out,"CAUGHT!",0,0);
-            raster(ee,out,0x9a7e + s[CHOICE]*384+frame*192,64,0,32,24,0);
-            snprintf(name,sizeof(name),"%.16s",speciesName(walkerRoutePokemonId(ee,s[CHOICE])));label(out,name,0,26);
-            label(out,"PARTY FULL",0,38);
-        }
-        label(out,"PRESS A BUTTON",4,56);
-    }else if(s[VIEW]==PACK && !s[REPLACE]){
-        inventoryRender(ee,out,s,ms);
+    }else if(s[VIEW]==PACK && s[REPLACE]){
+        discardRender(ee,out,s,ms);
     }else if(s[VIEW]==PACK){
-        label(out,s[REPLACE]?"REPLACE SLOT?":"INVENTORY",1,0);
-        if(s[REPLACE] && s[SEL]==3)label(out,"LEAVE NEW FIND",3,25);
-        else {
-            int index=s[SEL],pokemon=s[REPLACE]?s[REPLACE]==1:index<3;
-            /* Replacing: SEL is the slot itself (0-2) for Pokemon and items alike.
-             * Browsing: 0-2 Pokemon, 3-5 items, 6-15 friend gifts. */
-            unsigned id;
-            if(pokemon)id=walkerPokemonId(ee,index%3);
-            else if(s[REPLACE])id=walkerItemId(ee,index);
-            else if(index<6)id=walkerItemId(ee,index-3);
-            else if(index<16)id=ee[0xcec8+(index-6)*4]|ee[0xcec9+(index-6)*4]<<8;
-            else id=0;
-            char value[22];snprintf(value,sizeof(value),"%s %d",pokemon?"POKEMON":"ITEM",index+1);label(out,value,0,17);
-            const char *name=id?(pokemon?speciesName(id):lcdItem(id)):"EMPTY";
-            snprintf(value,sizeof(value),"%.16s",name);label(out,value,0,31);
-            if(pokemon && id)for(unsigned candidate=0;candidate<3;candidate++)if(walkerRoutePokemonId(ee,candidate)==id){raster(ee,out,0x9a7e + candidate*384+frame*192,60,41,32,24,0);break;}
-        }
-        label(out,s[REPLACE]?"< SELECT >":"<   BACK   >",0,56);
+        inventoryRender(ee,out,s,ms);
     }else if(s[VIEW]==TRAINER){
         trainerRender(ee,out,s,ms);
     }else if(s[VIEW]==SETTINGS){
