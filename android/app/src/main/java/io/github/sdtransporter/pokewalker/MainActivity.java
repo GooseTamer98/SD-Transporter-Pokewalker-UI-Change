@@ -13,10 +13,7 @@ import java.io.*;
 import java.net.*;
 import java.security.SecureRandom;
 public final class MainActivity extends Activity {
-    // Pokewalker palette: LCD gray-green with near-black pixels on a white/red shell.
-    static final int LCD=0xffb4b7aa,LCD_DARK=0xff9a9f91,PIXEL=0xff232b1d,PIXEL_SOFT=0xff555e4c,SHELL=0xffeceae4,RED=0xffd8283a,BEZEL=0xff111111;
-    private static final int INK=PIXEL,MUTED=PIXEL_SOFT,MINT=PIXEL,GOLD=PIXEL,PANEL=LCD;
-    private static final android.graphics.Typeface PIXEL_FONT=android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE,android.graphics.Typeface.BOLD);
+    private static final int INK=0xffe9f6f0,MUTED=0xff9ebeb7,MINT=0xff44ddb3,GOLD=0xfffcca66,PANEL=0xff17303b;
     private WalkerStore state;
     private LinearLayout panel;
     private TextView stats, appTitle;
@@ -30,6 +27,8 @@ public final class MainActivity extends Activity {
     private long visitStarted;
     private String classicProfile="";
     private boolean classicOnly=true;
+    private boolean roundKeys;
+    private int lcdCursor;
     private int pressedImageButton=-1;
     private boolean imageHeld;
     private final Runnable imageHold=()->{if(page.equals("classic")&&pressedImageButton==1){imageHeld=true;classicPress(3);}};
@@ -49,11 +48,11 @@ public final class MainActivity extends Activity {
     private final Runnable redraw=new Runnable(){public void run(){if(syncBusy&&!state.syncing){syncBusy=false;home();startTracking(false);}updateHeader();handler.postDelayed(this,500);}};
     @Override public void onCreate(Bundle bundle){
         super.onCreate(bundle);state=WalkerStore.get(this);
-        getWindow().setStatusBarColor(RED);getWindow().setNavigationBarColor(SHELL);
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundColor(SHELL);
+        getWindow().setStatusBarColor(0xff0b1a28);getWindow().setNavigationBarColor(0xff0b1a28);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundColor(0xff0b1a28);
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(16),dp(12),dp(16),dp(20));scroll.addView(root);
-        appTitle=text("POKéWALKER",24,0xffffffff);appTitle.setGravity(Gravity.CENTER);appTitle.setBackground(box(RED,BEZEL,0,2));appTitle.setPadding(dp(8),dp(8),dp(8),dp(8));root.addView(appTitle,new LinearLayout.LayoutParams(-1,-2));picture=new WalkerPicture();root.addView(picture,new LinearLayout.LayoutParams(-1,dp(250)));
-        stats=text("",16,PIXEL);stats.setBackground(box(LCD,BEZEL,0,3));stats.setPadding(dp(12),dp(10),dp(12),dp(10));LinearLayout.LayoutParams statsLp=new LinearLayout.LayoutParams(-1,-2);statsLp.topMargin=dp(10);root.addView(stats,statsLp);
+        appTitle=text("Pokewalker",27,INK);root.addView(appTitle);picture=new WalkerPicture();root.addView(picture,new LinearLayout.LayoutParams(-1,dp(250)));
+        stats=text("",18,MINT);root.addView(stats);
         panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);root.addView(panel);setContentView(scroll);
         // Keep controls clear of gesture navigation, system bars and cutouts.
         scroll.setOnApplyWindowInsetsListener((view,insets)->{
@@ -88,28 +87,20 @@ public final class MainActivity extends Activity {
     @Override protected void onPause(){handler.removeCallbacks(imageHold);pressedImageButton=-1;handler.removeCallbacks(classicClock);stopClassicAudio();super.onPause();}
     @Override protected void onDestroy(){handler.removeCallbacks(redraw);handler.removeCallbacks(classicClock);stopClassicAudio();if(peerSession!=null)peerSession.close();pendingPeerPermission=null;generation++;super.onDestroy();}
     private int dp(float x){return (int)(x*getResources().getDisplayMetrics().density+.5f);}
-    private TextView text(String s,int size,int color){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setTypeface(PIXEL_FONT);v.setPadding(0,dp(5),0,dp(5));return v;}
-    /** Flat LCD-style rectangle with a heavy pixel border (no rounded corners, like the real screen). */
+    private TextView text(String s,int size,int color){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setPadding(0,dp(5),0,dp(5));return v;}
     private GradientDrawable box(int fill,int stroke,int radiusDp,int strokeDp){GradientDrawable d=new GradientDrawable();d.setColor(fill);d.setCornerRadius(dp(radiusDp));d.setStroke(dp(strokeDp),stroke);return d;}
-    /** Menu row that inverts (dark box, light text) while pressed or focused, like the Pokewalker's selection cursor. */
-    private android.graphics.drawable.StateListDrawable lcdRow(){
-        android.graphics.drawable.StateListDrawable s=new android.graphics.drawable.StateListDrawable();
-        GradientDrawable on=box(PIXEL,PIXEL,2,2),off=box(LCD,PIXEL,2,2);
-        s.addState(new int[]{android.R.attr.state_pressed},on);s.addState(new int[]{android.R.attr.state_focused},on);s.addState(new int[]{-android.R.attr.state_enabled},box(LCD_DARK,PIXEL_SOFT,2,2));s.addState(new int[]{},off);return s;
-    }
-    private void heading(String title){appTitle.setVisibility(View.VISIBLE);stats.setVisibility(View.VISIBLE);picture.getLayoutParams().height=dp(page.equals("radar")||page.equals("dowsing")?260:320);picture.requestLayout();panel.removeAllViews();TextView t=text("◀  "+title.toUpperCase(java.util.Locale.ROOT)+"  ▶",18,PIXEL);t.setGravity(Gravity.CENTER);t.setBackground(box(LCD,BEZEL,0,3));t.setPadding(dp(8),dp(10),dp(8),dp(10));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(12);panel.addView(t,lp);}
-    private void note(String message){TextView t=text(message,15,PIXEL);t.setPadding(dp(4),dp(6),dp(4),dp(2));panel.addView(t);}
+    private void heading(String title){appTitle.setVisibility(View.VISIBLE);stats.setVisibility(View.VISIBLE);picture.getLayoutParams().height=dp(page.equals("radar")||page.equals("dowsing")?260:320);picture.requestLayout();panel.removeAllViews();panel.addView(text(title,23,INK));}
+    private void note(String message){panel.addView(text(message,17,MUTED));}
     private Button button(String label,Runnable action){
-        Button b=new Button(this);b.setText(label);b.setTextSize(16);b.setTypeface(PIXEL_FONT);b.setAllCaps(false);b.setStateListAnimator(null);
-        b.setTextColor(new android.content.res.ColorStateList(new int[][]{{android.R.attr.state_pressed},{android.R.attr.state_focused},{}},new int[]{LCD,LCD,PIXEL}));
-        b.setBackground(lcdRow());
+        Button b=new Button(this);b.setText(label);b.setTextSize(17);b.setTextColor(INK);b.setAllCaps(false);
+        GradientDrawable background=new GradientDrawable();background.setColor(PANEL);background.setCornerRadius(dp(12));b.setBackground(background);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(55));lp.topMargin=dp(8);panel.addView(b,lp);
         if(label.length()>2){b.setCompoundDrawablesWithIntrinsicBounds(new PixelMenuIcon(this,PixelMenuIcon.kind(label)),null,null,null);b.setCompoundDrawablePadding(dp(12));b.setPadding(dp(14),0,dp(14),0);b.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);}
         b.setOnClickListener(v->action.run());return b;
     }
     private Button patch(LinearLayout row,String label,Runnable action){
         Button b=button(label,action);panel.removeView(b);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(60),1);lp.setMargins(dp(3),dp(4),dp(3),dp(4));
-        if(label.length()<=2){ // the three physical keys: white domed buttons with a grey rim
+        if(roundKeys&&label.length()<=2){ // the three physical keys: white domed buttons with a grey rim
             android.graphics.drawable.StateListDrawable keys=new android.graphics.drawable.StateListDrawable();
             keys.addState(new int[]{android.R.attr.state_pressed},box(0xffc9c7c0,0xff8a8982,30,3));keys.addState(new int[]{},box(0xfffbfaf7,0xffa9a8a1,30,3));
             b.setBackground(keys);b.setTextColor(0xff8f8e88);b.setTextSize(22);b.setGravity(Gravity.CENTER);b.setPadding(0,0,0,0);
@@ -177,7 +168,7 @@ public final class MainActivity extends Activity {
     private void renderClassicControls(){
         panel.removeAllViews();appTitle.setVisibility(classicOnly?View.GONE:View.VISIBLE);stats.setVisibility(classicOnly?View.GONE:View.VISIBLE);
         picture.getLayoutParams().height=dp(360);picture.requestLayout();
-        Switch toggle=new Switch(this);toggle.setText("Classic mode");toggle.setTextColor(INK);toggle.setTextSize(16);toggle.setTypeface(PIXEL_FONT);toggle.setChecked(classicOnly);
+        Switch toggle=new Switch(this);toggle.setText("Classic mode");toggle.setTextColor(INK);toggle.setTextSize(18);toggle.setChecked(classicOnly);
         panel.addView(toggle,new LinearLayout.LayoutParams(-1,dp(56)));
         toggle.setOnCheckedChangeListener((view,enabled)->{classicOnly=enabled;renderClassicControls();});
         if(!classicOnly){
@@ -453,7 +444,7 @@ public final class MainActivity extends Activity {
             int[] choice=Native.encounter(state.data);if(choice[0]<0){toast("No usable route encounters.");return;}
             Native.command(state.data,1,10);encounter=choice[0];round=0;rounds=3-encounter+random(2);save();
         }
-        page="radar";generation++;nextRustle();
+        lcdCursor=0;page="radar";generation++;nextRustle();
     }
     private void nextRustle(){
         page="radar";target=-1;heading("Poké Radar");note("Wait for a rustling patch. Search "+(round+1)+" / "+rounds);radarButtons();
@@ -468,12 +459,12 @@ public final class MainActivity extends Activity {
         },delay);
     }
     private void radarButtons(){
-        radarProgress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);radarProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(PIXEL));radarProgress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(LCD_DARK));radarProgress.setMax(1000);radarProgress.setProgress(target<0?0:1000);panel.addView(radarProgress,new LinearLayout.LayoutParams(-1,dp(12)));
+        radarProgress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);radarProgress.setMax(1000);radarProgress.setProgress(target<0?0:1000);panel.addView(radarProgress,new LinearLayout.LayoutParams(-1,dp(12)));
         final int progressEpoch=generation;final ProgressBar current=radarProgress;final long duration=Math.max(1,radarDeadline-SystemClock.elapsedRealtime());
         if(target>=0)handler.post(new Runnable(){public void run(){if(progressEpoch!=generation||!page.equals("radar")||radarProgress!=current)return;long left=radarDeadline-SystemClock.elapsedRealtime();current.setProgress((int)Math.max(0,Math.min(1000,left*1000/duration)));if(left>0)handler.postDelayed(this,40);}});
         LinearLayout row=null;
         for(int n=0;n<4;n++){if(n%2==0)row=patchRow();final int index=n;grassPatch(row,n+1,index==target,false,()->{
-            if(target<0)return;
+            lcdCursor=index;if(target<0)return;
             if(SystemClock.elapsedRealtime()>radarDeadline){result("It got away","Try another Radar search.");return;}
             if(index!=target){if(round==0){generation++;nextRustle();}else result("It got away","The Pokémon escaped.");return;}
             generation++;round++;if(round>=rounds)startBattle(encounter);else nextRustle();
@@ -483,7 +474,10 @@ public final class MainActivity extends Activity {
     private void startBattle(int which){generation++;battleAnimating=false;battleVisualAction=-1;battleAnimationStart=SystemClock.elapsedRealtime();previousPlayerHp=previousWildHp=4;battle=new int[]{4,4,0,0,0,which,0};battleScreen("Attack, evade or catch.");}
     private void battleScreen(String message){
         page="battle";heading("Wild "+Native.species(Native.command(state.data,9,battle[5])));note(message);note("Your HP: "+battle[0]+" / 4     Wild HP: "+battle[1]+" / 4");
-        note("◀ Attack     ● Poké Ball     ▶ Evade");LinearLayout keys=patchRow();patch(keys,"◀",()->battleAction(0)).setEnabled(!battleAnimating);patch(keys,"●",()->battleAction(2)).setEnabled(!battleAnimating);patch(keys,"▶",()->battleAction(1)).setEnabled(!battleAnimating);button("Leave",this::home);
+        if(battle[3]!=0&&!battleAnimating){button("Continue",this::home);return;} // the animation already showed the outcome
+        note("◀ Attack     ● Poké Ball     ▶ Evade");roundKeys=true;LinearLayout keys=patchRow();
+        patch(keys,"◀",()->battleAction(0)).setEnabled(!battleAnimating);patch(keys,"●",()->battleAction(2)).setEnabled(!battleAnimating);patch(keys,"▶",()->battleAction(1)).setEnabled(!battleAnimating);
+        roundKeys=false;button("Leave",this::home);
     }
     private void battleAction(int action){
         if(battleAnimating)return;
@@ -497,15 +491,19 @@ public final class MainActivity extends Activity {
             if(epoch!=generation||!state.profileId.equals(profile)||!page.equals("battle"))return;
             battleAnimating=false;
             String[] messages={"You attacked; the wild Pokémon replied.","It dodged and attacked!","A critical hit, then a reply!","A stare-down…","It fled!","Caught!","It escaped from the ball and fled.","You evaded and counter-attacked!","Your partner was defeated; up to 10 watts were lost."};
-            if(battle[4]!=0){showReward(savedReward,false,battle[5]);return;}
-            if(battle[3]!=0){result(messages[battle[6]],"Your walking partner is safe.");return;}battleScreen(messages[battle[6]]);
-        },action==2?1800:1200);
+            if(battle[4]!=0){
+                if(savedReward==1){battleScreen("Caught "+Native.species(Native.command(state.data,9,battle[5]))+"! Saved, ready to return to HGSS.");return;}
+                showReward(savedReward,false,battle[5]);return; // pack full: choose a slot
+            }
+            if(battle[3]!=0){if(action==2){battleScreen(messages[battle[6]]);return;}result(messages[battle[6]],"Your walking partner is safe.");return;}
+            battleScreen(messages[battle[6]]);
+        },action==2?3200:2000);
     }
     private void dowseStart(){
         synchronized(WalkerStore.LOCK){
             if(!owned())return;if(Native.info(state.data)[Native.HAS_POKEMON]==0){toast("Dowsing needs a walking companion.");return;}if(Native.info(state.data)[Native.WATTS]<3){toast("Dowsing needs 3 watts.");return;}
             item=Native.command(state.data,2,state.expandedItems?1:0);if(item<0){toast("No usable route item data.");return;}
-            Native.command(state.data,1,3);hidden=random(6);attempts=2;empty=-1;save();
+            Native.command(state.data,1,3);hidden=random(6);attempts=2;empty=-1;lcdCursor=0;save();
         }
         generation++;dowseScreen("An item is hidden in one of six patches.");
     }
@@ -513,6 +511,7 @@ public final class MainActivity extends Activity {
         page="dowsing";heading("Dowsing");note(message);note(attempts+" attempts left");
         LinearLayout row=null;
         for(int n=0;n<6;n++){if(n==0)row=patchRow();final int index=n;View b=grassPatch(row,n+1,false,n==empty,()->{
+            lcdCursor=index;
             if(index==hidden){storeReward(true,item,-1);return;}
             empty=index;attempts--;if(attempts==0){result("Nothing found","Try again on your next search.");return;}
             int distance=Math.abs(index-hidden);dowseScreen(distance<=1?"It's near!":"It's far away…");
@@ -549,7 +548,7 @@ public final class MainActivity extends Activity {
         note("On the console, open Settings → Phone sync. Enter its IP address below. Keep the console app open on the same local Wi-Fi.");
         if(!syncFailure.isEmpty())note(syncFailure);
         if(!state.pendingToken.isEmpty()&&!state.active())note("An unfinished receive can be retried with the same console. If you force-unlocked it, retry once more after the old session is refused.");
-        EditText host=new EditText(this);host.setSingleLine(true);host.setTextColor(INK);host.setHintTextColor(MUTED);host.setTypeface(PIXEL_FONT);host.setBackground(box(LCD,BEZEL,0,2));host.setPadding(dp(12),dp(10),dp(12),dp(10));host.setHint("Console IP, e.g. 192.168.1.20");host.setText(state.host);panel.addView(host);
+        EditText host=new EditText(this);host.setSingleLine(true);host.setTextColor(INK);host.setHintTextColor(MUTED);host.setHint("Console IP, e.g. 192.168.1.20");host.setText(state.host);panel.addView(host);
         button("Saved consoles",()->showSavedConsoles(host));
         button("Save this console",()->saveConsole(host));
         button("Receive Pokémon from console",()->{
@@ -658,30 +657,74 @@ public final class MainActivity extends Activity {
             for(int d=-5;d<=5;d+=2){c.drawRect(cx+d*scale,cy+d*scale,cx+(d+1)*scale,cy+(d+1)*scale,paint);c.drawRect(cx+d*scale,cy-d*scale,cx+(d+1)*scale,cy-(d-1)*scale,paint);}
             paint.setAntiAlias(true);
         }
+        private void pokeBall(Canvas c,float bx,float by,float scale){
+            paint.setColor(0xff232b1d);c.drawCircle(bx,by,5*scale,paint);paint.setColor(0xffb4b7aa);c.drawCircle(bx,by,3*scale,paint);paint.setColor(0xff232b1d);c.drawRect(bx-4*scale,by-scale/2,bx+4*scale,by+scale/2,paint);
+        }
+        private float wave(float ms,float from,float length){return (float)Math.sin(Math.PI*Math.max(0,Math.min(1,(ms-from)/length)));}
+        /** Turn-based battle: your Pokémon acts first, then the wild one. A ball throw plays out its own capture sequence. */
         private void drawBattle(Canvas c,float left,float top,float right,float bottom){
-            long elapsed=Math.max(0,SystemClock.elapsedRealtime()-battleAnimationStart);float scale=Math.max(1,(float)Math.floor(Math.min((right-left)/96,(bottom-top)/64)));
+            float ms=Math.max(0,SystemClock.elapsedRealtime()-battleAnimationStart);
+            if(!battleAnimating&&battleVisualAction>=0)ms=100000; // settled pose after the animation
+            float scale=Math.max(1,(float)Math.floor(Math.min((right-left)/96,(bottom-top)/64)));
             float x=(left+right-96*scale)/2,y=(top+bottom-64*scale)/2;
-            int frame=(int)(elapsed/160)&1;float player=56,wild=8;boolean showWild=true,showPlayer=true;
-            float t=Math.min(1,elapsed/(battleVisualAction==2?1800f:1200f));
-            if(battleVisualAction<0)wild=8-Math.max(0,1-elapsed/450f)*40;
-            else if(battleAnimating&&battleVisualAction==0){if(t<.45f)player-=16*(float)Math.sin(t/.45*Math.PI);else wild+=16*(float)Math.sin((t-.45)/.55*Math.PI);if(t>.3f&&t<.48f)showWild=frame==0;if(t>.7f&&t<.86f)showPlayer=frame==0;if(battle[6]==4&&t>.45f)wild-=(t-.45f)*70;}
-            else if(battleAnimating&&battleVisualAction==1){wild+=16*(float)Math.sin(Math.min(1,t*2)*Math.PI);player+=Math.min(8,t*20);if(battle[6]==7&&t>.5f)player=56-16*(float)Math.sin((t-.5)*2*Math.PI);if(battle[6]==4)wild-=t*42;}
-            if(battleAnimating&&battleVisualAction!=2){ // impact sparks: on the wild Pokémon, then on yours if it hits back
-                boolean blink=((int)(elapsed/60)&1)==0;
-                if(blink&&t>.12f&&t<.5f&&battle[1]<previousWildHp)spark(c,x+(wild+16)*scale,y+34*scale,scale);
-                else if(blink&&t>.5f&&t<.9f&&battle[0]<previousPlayerHp)spark(c,x+(player+16)*scale,y+34*scale,scale);
+            int frame=(int)(ms/160)&1;boolean blink=((int)(ms/60)&1)==0;
+            float player=56,wild=8,wildY=22,playerY=22;boolean showWild=true,showPlayer=true,sparkWild=false,sparkPlayer=false;
+            int hpPlayer=battle[0],hpWild=battle[1],action=battleVisualAction,outcome=battle[6];
+            boolean fled=outcome==4,caught=battle[4]!=0,ball=false,stars=false;float bx=0,by=0;
+            if(action<0)wild=8-Math.max(0,1-ms/450f)*40;
+            else if(action==0){
+                // 1) your Pokémon lunges and strikes
+                if(ms<450)player-=18*wave(ms,0,450);
+                if(ms>=200&&ms<600){if(battle[1]<previousWildHp){showWild=blink;sparkWild=blink;}else if(outcome==1)wildY-=8*wave(ms,200,400);}
+                if(ms<400)hpWild=previousWildHp;
+                // 2) then the wild Pokémon answers (or runs away)
+                if(ms>=1000){
+                    if(fled)wild-=Math.min(900,ms-1000)/900f*60;
+                    else{wild+=18*wave(ms,1000,450);if(ms>=1200&&ms<1600&&battle[0]<previousPlayerHp){showPlayer=blink;sparkPlayer=blink;}}
+                }
+                if(ms<1400)hpPlayer=previousPlayerHp;
+            }else if(action==1){
+                if(fled)wild-=Math.min(1200,ms)/1200f*60;
+                else{
+                    // the wild Pokémon attacks, yours hops out of the way...
+                    wild+=18*wave(ms,0,450);player+=8*wave(ms,150,400);playerY-=10*wave(ms,150,400);
+                    // ...and counters if it found an opening
+                    if(outcome==7&&ms>=1000){player-=18*wave(ms,1000,450);if(ms>=1200&&ms<1600&&battle[1]<previousWildHp){showWild=blink;sparkWild=blink;}}
+                    if(outcome==7&&ms<1400)hpWild=previousWildHp;
+                }
+            }else{
+                // Poké Ball: throw, absorb, drop, three shakes, then it clicks shut (stars) or bursts open and the Pokémon flees
+                float wx=x+(wild+16)*scale,wy=y+34*scale,gy=y+42*scale,px=x+(player+8)*scale,py=y+30*scale;
+                if(ms<500){ball=true;float p=ms/500f;bx=px+(wx-px)*p;by=py+(wy-py)*p-14*scale*(float)Math.sin(Math.PI*p);}
+                else if(ms<1100){ball=true;bx=wx;by=wy+(gy-wy)*Math.max(0,Math.min(1,(ms-800)/300f));}
+                else{ball=true;bx=wx+(ms<2300?3*scale*(float)Math.sin(2*Math.PI*(ms-1100)/400f):0);by=gy;}
+                if(ms>=650&&ms<1900||ms>=650&&caught)showWild=false;else if(ms>=500&&ms<650)showWild=blink;
+                if(!caught&&ms>=1900){ball=false;showWild=true;wild-=Math.min(900,Math.max(0,ms-2300))/900f*60;}
+                stars=caught&&ms>=2300;
+                hpWild=battle[1];
             }
-            boolean ball=battleAnimating&&battleVisualAction==2;
-            if(ball&&t>.28f)showWild=false;
-            if(showWild)bitmap(c,0x9a7e+battle[5]*384+frame*192,32,24,x+wild*scale,y+22*scale,scale,(state.data[0x8f52+battle[5]*16+14]&1)==0);
-            if(showPlayer)bitmap(c,0x91be+frame*192,32,24,x+player*scale,y+22*scale,scale,false);
-            if(ball){float q=Math.min(1,t/.3f),bx=x+(70-46*q)*scale,by=y+(34-15*(float)Math.sin(q*Math.PI))*scale;if(t>.3f){bx=x+(24+(t<.8f?(float)Math.sin(t*40)*2:0))*scale;by=y+38*scale;}
-                paint.setColor(0xff232b1d);c.drawCircle(bx,by,5*scale,paint);paint.setColor(0xffb4b7aa);c.drawCircle(bx,by,3*scale,paint);paint.setColor(0xff232b1d);c.drawRect(bx-4*scale,by-scale/2,bx+4*scale,by+scale/2,paint);
-                if(t>.8f&&battle[4]!=0)for(int n=-1;n<=1;n++){float sx=bx+n*9*scale,sy=by-(n==0?13:8)*scale;c.drawRect(sx-scale,sy-3*scale,sx+scale,sy+3*scale,paint);c.drawRect(sx-3*scale,sy-scale,sx+3*scale,sy+scale,paint);}
-                if(t>.8f&&battle[4]==0){paint.setColor(0xff232b1d);c.drawLine(bx-9*scale,by-8*scale,bx-3*scale,by-3*scale,paint);c.drawLine(bx+9*scale,by-8*scale,bx+3*scale,by-3*scale,paint);}
-            }
-            int hpPlayer=battleAnimating&&t<.8f?previousPlayerHp:battle[0],hpWild=battleAnimating&&t<.4f?previousWildHp:battle[1];
+            if(showWild&&!(action==2&&!caught&&ms>=1900&&ms<2300&&!blink))bitmap(c,0x9a7e+battle[5]*384+frame*192,32,24,x+wild*scale,y+wildY*scale,scale,(state.data[0x8f52+battle[5]*16+14]&1)==0);
+            if(showPlayer)bitmap(c,0x91be+frame*192,32,24,x+player*scale,y+playerY*scale,scale,false);
+            if(ball){pokeBall(c,bx,by,scale);}
+            if(stars){paint.setColor(0xff232b1d);for(int n=-1;n<=1;n++){float sx=bx+n*9*scale,sy=by-(n==0?13:8)*scale;c.drawRect(sx-scale,sy-3*scale,sx+scale,sy+3*scale,paint);c.drawRect(sx-3*scale,sy-scale,sx+3*scale,sy+scale,paint);}}
+            if(sparkWild)spark(c,x+(wild+16)*scale,y+34*scale,scale);
+            if(sparkPlayer)spark(c,x+(player+16)*scale,y+34*scale,scale);
             for(int n=0;n<4;n++){paint.setColor(n<hpWild?0xff232b1d:0xff99b484);c.drawRect(x+(8+n*6)*scale,y+54*scale,x+(12+n*6)*scale,y+57*scale,paint);paint.setColor(n<hpPlayer?0xff232b1d:0xff99b484);c.drawRect(x+(56+n*6)*scale,y+54*scale,x+(60+n*6)*scale,y+57*scale,paint);}
+        }
+        /** Which original Pokewalker screen the LCD shows for the current app page (VIEW ids match shared/walkerclassic.c). */
+        private int[] lcdScene(){
+            int[] s=new int[40];s[19]=state.classicVolume;s[20]=state.classicContrast;
+            switch(page){
+            case "radar":s[0]=2;s[1]=Math.max(0,Math.min(3,lcdCursor));s[2]=target<0?0:1;s[3]=encounter;s[4]=Math.max(0,target);s[5]=round;break;
+            case "dowsing":s[0]=3;s[1]=Math.max(0,Math.min(5,lcdCursor));s[2]=empty>=0&&attempts>0?4:0;s[4]=Math.max(0,hidden);s[6]=attempts;s[7]=empty;break;
+            case "settings":s[0]=7;break;
+            case "pack":s[0]=5;break;
+            case "card":s[0]=6;break;
+            case "connect":case "nearby":case "sync":s[0]=8;break;
+            case "connectProfiles":s[0]=8;s[1]=1;break;
+            default:break;
+            }
+            return s;
         }
         private RectF drawShell(Canvas canvas,float cx,float cy,float r){
             paint.setAntiAlias(true);paint.setFilterBitmap(true);
@@ -700,7 +743,7 @@ public final class MainActivity extends Activity {
                 else if(page.equals("peer")&&peerSession!=null)pixels=peerSession.frame();
                 else if(page.equals("classic"))pixels=classicPixels;
                 if(pixels==null&&state.data!=null&&!state.returnPending&&!state.revoked&&!state.returnCompleted)
-                    pixels=Native.classicFrame(state.data,new int[40],SystemClock.elapsedRealtime());
+                    pixels=Native.classicFrame(state.data,lcdScene(),SystemClock.elapsedRealtime());
                 if(page.equals("battle")&&battle!=null&&state.data!=null)drawBattle(canvas,lcd.left,lcd.top,lcd.right,lcd.bottom);
                 else if(pixels!=null){
                     float scale=Math.min(lcd.width()/96,lcd.height()/64),x=lcd.centerX()-48*scale,y=lcd.centerY()-32*scale;
@@ -713,6 +756,7 @@ public final class MainActivity extends Activity {
                 }
             }
             canvas.restore();paint.setAntiAlias(true);
+            if(page.equals("battle")&&battle!=null)postInvalidateDelayed(33);
             if(page.equals("peer")||page.equals("classic")||
                     (page.equals("visit")&&SystemClock.elapsedRealtime()-visitStarted<10000))
                 postInvalidateDelayed(100);
