@@ -402,26 +402,198 @@ static const char *caps(const char *name){
     out[n]=0;return out;
 }
 static const char *speciesCaps(unsigned id){return caps(speciesName(id));}
-/* Small plain labels only where custom app features have no uploaded label. */
+/* ---- Text for screens the walker has no artwork for ----
+ * The walker's own text is pre-rendered art in its EEPROM. To draw new text in the same font we read the
+ * letter shapes straight out of that art (names, course, trainer, item names all have known spelling) and
+ * fall back to a built-in copy of the font for any letter the walker's text happens not to contain. */
+/* Pixel shapes of the walker LCD text font (cap height 8, x-height 5). Rows start at `top` relative to the cap line. */
+static const struct { char ch; signed char top; unsigned char rows; const char *bits[10]; } builtinFont[]={
+    {'!',0,8,{"#","#","#","#","#",".",".","#"}},
+    {'%',0,8,{"#..#","...#","..#.","..#.",".#..",".#..","#...","#..#"}},
+    {'\'',-1,4,{"##","##",".#","#."}},
+    {'(',0,8,{"..#",".#.","#..","#..","#..","#..","#..",".#."}},
+    {')',0,8,{"#..",".#.","..#","..#","..#","..#","..#",".#."}},
+    {'+',2,5,{".#.",".#.","###",".#.",".#."}},
+    {',',7,2,{"#","#"}},
+    {'-',4,1,{"###"}},
+    {'.',7,1,{"#"}},
+    {'/',0,8,{"...#","...#","..#.","..#.",".#..",".#..","#...","#..."}},
+    {'0',0,8,{".##.","#..#","#..#","#..#","#..#","#..#","#..#",".##."}},
+    {'1',0,8,{".#.","##.",".#.",".#.",".#.",".#.",".#.","###"}},
+    {'2',0,8,{".##.","#..#","...#","..#.",".#..","#...","#...","####"}},
+    {'3',0,8,{"###.","...#","...#",".##.","...#","...#","#..#",".##."}},
+    {'4',0,8,{"...#","..##",".#.#","#..#","####","...#","...#","...#"}},
+    {'5',0,8,{"####","#...","###.","...#","...#","...#","#..#",".##."}},
+    {'6',0,8,{".##.","#...","#...","###.","#..#","#..#","#..#",".##."}},
+    {'7',0,8,{"####","...#","...#","..#.","..#.",".#..",".#..",".#.."}},
+    {'8',0,8,{".##.","#..#","#..#",".##.","#..#","#..#","#..#",".##."}},
+    {'9',0,8,{".##.","#..#","#..#",".###","...#","...#","...#",".##."}},
+    {':',2,5,{"#",".",".",".","#"}},
+    {'?',0,8,{".##.","#..#","...#","..#.",".#..","....","....",".#.."}},
+    {'A',0,8,{".##.","#..#","#..#","#..#","####","#..#","#..#","#..#"}},
+    {'B',0,8,{"###.","#..#","#..#","###.","#..#","#..#","#..#","###."}},
+    {'C',0,8,{".##.","#..#","#..#","#...","#...","#..#","#..#",".##."}},
+    {'D',0,8,{"###.","#..#","#..#","#..#","#..#","#..#","#..#","###."}},
+    {'E',0,8,{"####","#...","#...","####","#...","#...","#...","####"}},
+    {'F',0,8,{"####","#...","#...","###.","#...","#...","#...","#..."}},
+    {'G',0,8,{".##.","#..#","#...","#.##","#..#","#..#","#..#",".##."}},
+    {'H',0,8,{"#..#","#..#","#..#","####","#..#","#..#","#..#","#..#"}},
+    {'I',0,8,{"###",".#.",".#.",".#.",".#.",".#.",".#.","###"}},
+    {'J',0,8,{"...#","...#","...#","...#","...#","#..#","#..#",".##."}},
+    {'K',0,8,{"#..#","#..#","#.#.","##..","##..","#.#.","#..#","#..#"}},
+    {'L',0,8,{"#...","#...","#...","#...","#...","#...","#...","####"}},
+    {'M',0,8,{"#...#","##.##","##.##","#.#.#","#.#.#","#...#","#...#","#...#"}},
+    {'N',0,8,{"#..#","#..#","##.#","##.#","#.##","#.##","#..#","#..#"}},
+    {'O',0,8,{".##.","#..#","#..#","#..#","#..#","#..#","#..#",".##."}},
+    {'P',0,8,{"###.","#..#","#..#","###.","#...","#...","#...","#..."}},
+    {'Q',0,8,{".##.","#..#","#..#","#..#","#..#","#.##","#..#",".###"}},
+    {'R',0,8,{"###.","#..#","#..#","#..#","###.","#.#.","#..#","#..#"}},
+    {'S',0,8,{".##.","#..#","#...",".#..","..#.","...#","#..#",".##."}},
+    {'T',0,8,{"###",".#.",".#.",".#.",".#.",".#.",".#.",".#."}},
+    {'U',0,8,{"#..#","#..#","#..#","#..#","#..#","#..#","#..#",".##."}},
+    {'V',0,8,{"#..#","#..#","#..#","#..#","#..#","#..#",".##.",".##."}},
+    {'W',0,8,{"#...#","#...#","#...#","#...#","#.#.#","#.#.#","##.##","#...#"}},
+    {'X',0,8,{"#..#","#..#",".##.",".##.",".##.",".##.","#..#","#..#"}},
+    {'Y',0,8,{"#..#","#..#","#..#",".##.",".##.",".##.",".##.",".##."}},
+    {'Z',0,8,{"####","...#","..#.","..#.",".#..",".#..","#...","####"}},
+    {'a',3,5,{".##.","...#",".###","#..#",".###"}},
+    {'b',0,8,{"#...","#...","#...","###.","#..#","#..#","#..#","###."}},
+    {'c',3,5,{".##.","#..#","#...","#..#",".##."}},
+    {'d',0,8,{"...#","...#","...#",".###","#..#","#..#","#..#",".###"}},
+    {'e',3,5,{".##.","#..#","####","#...",".###"}},
+    {'f',0,8,{".##","#..","#..","###","#..","#..","#..","#.."}},
+    {'g',3,7,{".###","#..#","#..#",".###","...#","...#",".##."}},
+    {'h',0,8,{"#...","#...","#...","###.","#..#","#..#","#..#","#..#"}},
+    {'i',1,7,{"#",".","#","#","#","#","#"}},
+    {'j',1,9,{".#","..",".#",".#",".#",".#",".#",".#","#."}},
+    {'k',0,8,{"#...","#...","#...","#..#","#.#.","##..","#.#.","#..#"}},
+    {'l',0,8,{"#","#","#","#","#","#","#","#"}},
+    {'m',3,5,{"####.","#.#.#","#.#.#","#.#.#","#.#.#"}},
+    {'n',3,5,{"###.","#..#","#..#","#..#","#..#"}},
+    {'o',3,5,{".##.","#..#","#..#","#..#",".##."}},
+    {'p',3,7,{"###.","#..#","#..#","#..#","###.","#...","#..."}},
+    {'q',3,7,{".###","#..#","#..#","#..#",".###","...#","...#"}},
+    {'r',3,5,{"#.##","##..","#...","#...","#..."}},
+    {'s',3,5,{".###","#...",".##.","...#","###."}},
+    {'t',2,6,{".#.","###",".#.",".#.",".#.","..#"}},
+    {'u',3,5,{"#..#","#..#","#..#","#..#",".###"}},
+    {'v',3,5,{"#..#","#..#","#..#",".##.",".##."}},
+    {'w',3,5,{"#...#","#...#","#.#.#","#.#.#",".#.#."}},
+    {'x',3,5,{"#..#","#..#",".##.","#..#","#..#"}},
+    {'y',3,7,{"#..#","#..#","#..#",".###","...#","...#",".##."}},
+    {'z',3,5,{"####","...#",".##.","#...","####"}},
+};
+typedef struct { uint16_t col[8]; uint8_t width,advance,have; } Glyph;   /* column bit n = row n-1 below the cap line */
+static Glyph builtinGlyphs[128],atlasGlyphs[128];
+static int builtinReady;
+static const uint8_t *labelSource;           /* walker image the current frame is drawn from */
+static uint32_t atlasSignature;static int atlasValid;
+static void buildBuiltin(void){
+    if(builtinReady)return;
+    for(unsigned n=0;n<sizeof(builtinFont)/sizeof(builtinFont[0]);n++){
+        Glyph *g=&builtinGlyphs[(unsigned char)builtinFont[n].ch&127];
+        for(int r=0;r<builtinFont[n].rows;r++){
+            const char *bits=builtinFont[n].bits[r];
+            for(int c=0;bits[c]&&c<8;c++){
+                if(bits[c]=='#')g->col[c]|=(uint16_t)(1u<<(builtinFont[n].top+r+1));
+                if(c+1>g->width)g->width=(uint8_t)(c+1);
+            }
+        }
+        g->advance=(uint8_t)(g->width+1);g->have=1;
+    }
+    builtinGlyphs['\'' ].advance=4;
+    builtinReady=1;
+}
+static unsigned artPixel(const uint8_t *ee,unsigned addr,int w,int x,int y){
+    unsigned n=addr+(unsigned)((y/8)*w*2+x*2);
+    return (((ee[n]>>(y&7))&1)<<1)|((ee[n+1]>>(y&7))&1);
+}
+/* Learn glyphs from one piece of text art whose spelling we know. Skipped unless every letter checks out. */
+static void atlasLearn(const uint8_t *ee,unsigned addr,int w,const char *text){
+    if(!text||!*text||strlen(text)>30||strstr(text,"Poke"))return;
+    char chars[32];unsigned spaceBefore[32];unsigned count=0,pendingSpace=0;
+    for(const char *p=text;*p;p++){
+        if(*p==' '){pendingSpace=1;continue;}
+        if(!((*p>='A'&&*p<='Z')||(*p>='a'&&*p<='z')||(*p>='0'&&*p<='9')||*p=='\''||*p=='.'||*p=='-'))return;
+        if(count>=31)return;
+        chars[count]=*p;spaceBefore[count++]=pendingSpace;pendingSpace=0;
+    }
+    int gStart[32],gEnd[32],groups=0,start=-1;
+    for(int x=0;x<=w;x++){
+        int ink=0;
+        if(x<w)for(int y=0;y<16;y++)if(artPixel(ee,addr,w,x,y)==3){ink=1;break;}
+        if(ink&&start<0)start=x;
+        else if(!ink&&start>=0){if(groups>=32)return;gStart[groups]=start;gEnd[groups++]=x-1;start=-1;}
+    }
+    if((unsigned)groups!=count)return;
+    int top=99,minY[32],maxY[32];
+    for(int g=0;g<groups;g++){
+        minY[g]=99;maxY[g]=-1;
+        for(int x=gStart[g];x<=gEnd[g];x++)for(int y=0;y<16;y++)if(artPixel(ee,addr,w,x,y)==3){if(y<minY[g])minY[g]=y;if(y>maxY[g])maxY[g]=y;}
+        if((chars[g]>='A'&&chars[g]<='Z')||(chars[g]>='0'&&chars[g]<='9')){if(minY[g]<top)top=minY[g];}
+    }
+    if(top==99)return;
+    for(int g=0;g<groups;g++){   /* reject text whose letters don't sit where this font puts them (different case/spelling) */
+        char c=chars[g];int rel=minY[g]-top,low=maxY[g]-top;
+        if((c>='A'&&c<='Z')||(c>='0'&&c<='9')){if(rel!=0||low<6||low>7)return;}
+        else if(strchr("acemnorsuvwxz",c)){if(rel<2||rel>4||low!=7)return;}
+        else if(strchr("bdfhkl",c)){if(rel>1||low!=7)return;}
+        else if(c=='t'){if(rel<1||rel>3||low!=7)return;}
+        else if(c=='i'){if(rel<0||rel>2||low!=7)return;}
+        else if(strchr("gpqy",c)){if(rel<2||rel>4||low<8)return;}
+        else if(c=='j'){if(rel<0||rel>2||low<8)return;}
+        if(gEnd[g]-gStart[g]+1>8)return;
+    }
+    for(int g=0;g<groups;g++){
+        Glyph *dst=&atlasGlyphs[(unsigned char)chars[g]&127];
+        if(dst->have)continue;
+        Glyph tmp;memset(&tmp,0,sizeof(tmp));
+        tmp.width=(uint8_t)(gEnd[g]-gStart[g]+1);
+        for(int c=0;c<tmp.width;c++)for(int y=top-1;y<=top+9&&y<16;y++)
+            if(y>=0&&artPixel(ee,addr,w,gStart[g]+c,y)==3)tmp.col[c]|=(uint16_t)(1u<<(y-top+1));
+        tmp.advance=(uint8_t)(g+1<groups&&!spaceBefore[g+1]?gStart[g+1]-gStart[g]:tmp.width+1);
+        tmp.have=1;*dst=tmp;
+    }
+}
+static uint32_t atlasHash(const uint8_t *ee){
+    static const struct { unsigned addr,bytes; } spans[]={{0x1250,320},{0x907e,320},{0x993e,320},{0xa4fe,960},{0xa8be,3840},{0x910+3*320,320}};
+    uint32_t h=2166136261u;
+    for(unsigned s=0;s<sizeof(spans)/sizeof(spans[0]);s++)for(unsigned n=0;n<spans[s].bytes;n++)h=(h^ee[spans[s].addr+n])*16777619u;
+    return h;
+}
+static void atlasBuild(const uint8_t *ee){
+    uint32_t sig=atlasHash(ee);
+    if(atlasValid&&sig==atlasSignature)return;
+    memset(atlasGlyphs,0,sizeof(atlasGlyphs));
+    WalkerInfo info;
+    if(walkerRead(ee,&info)){
+        atlasLearn(ee,0x1250,80,info.trainer);
+        atlasLearn(ee,0x907e,80,info.route);
+        if(info.hasPokemon)atlasLearn(ee,0x993e,80,caps(speciesName(info.species)));
+        for(unsigned n=0;n<3;n++)atlasLearn(ee,0xa4fe + n*320,80,caps(speciesName(walkerRoutePokemonId(ee,n))));
+        for(unsigned n=0;n<10;n++)atlasLearn(ee,0xa8be + n*384,96,itemName(walkerRouteItemId(ee,n)));
+    }
+    atlasLearn(ee,0x910+3*320,80,"TRAINER CARD");
+    atlasSignature=sig;atlasValid=1;
+}
+/* Draw text in the LCD font: 1px ink with the font's grey drop shadow, proportional spacing. */
 static void label(uint8_t *out,const char *text,int x,int y){
-    static const char chars[]=" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:-/!?.abcdefghijklmnopqrstuvwxyz'";
-    static const uint16_t glyph[][5]={
-      {0,0,0,0,0},{126,9,9,9,126},{127,73,73,73,54},{62,65,65,65,34},{127,65,65,34,28},{127,73,73,73,65},{127,9,9,9,1},{62,65,73,73,122},{127,8,8,8,127},{65,65,127,65,65},{32,64,65,63,1},{127,8,20,34,65},{127,64,64,64,64},{127,2,12,2,127},{127,4,8,16,127},{62,65,65,65,62},{127,9,9,9,6},{62,65,81,33,94},{127,9,25,41,70},{70,73,73,73,49},{1,1,127,1,1},{63,64,64,64,63},{31,32,64,32,31},{63,64,56,64,63},{99,20,8,20,99},{7,8,112,8,7},{97,81,73,69,67},{62,81,73,69,62},{0,66,127,64,0},{98,81,73,73,70},{34,65,73,73,54},{24,20,18,127,16},{39,69,69,69,57},{60,74,73,73,48},{1,113,9,5,3},{54,73,73,73,54},{6,73,73,41,30},{0,54,54,0,0},{8,8,8,8,8},{32,16,8,4,2},{0,0,95,0,0},{2,1,81,9,6},{0,96,96,0,0},{32,84,84,120,0},{127,68,68,56,0},{56,68,68,40,0},{56,68,68,127,0},{56,84,84,88,0},{126,5,5,0,0},{56,324,324,252,0},{127,4,4,120,0},{125,0,0,0,0},{256,253,0,0,0},{127,16,40,68,0},{127,0,0,0,0},{124,4,124,4,120},{124,4,4,120,0},{56,68,68,56,0},{508,68,68,56,0},{56,68,68,508,0},{124,4,4,0,0},{72,84,84,36,0},{4,126,68,0,0},{60,64,64,124,0},{60,64,60,0,0},{60,64,48,64,60},{108,16,108,0,0},{156,288,288,252,0},{100,84,84,76,0},{3,0,0,0,0}};
-    /* The original text is proportional with a grey drop shadow: draw it first, then the 1px ink on top. */
+    buildBuiltin();
+    if(labelSource)atlasBuild(labelSource);
     for(int pass=0;pass<2;pass++){
-        const char *t=text;int gx=x;
-        for(;*t;t++){
-            char c=*t;const char *q=c?strchr(chars,c):0;unsigned index=q?(unsigned)(q-chars):40;
-            int left=0,right=-1;
-            for(int i=0;i<5;i++)if(glyph[index][i]){if(right<0)left=i;right=i;}
-            if(right<0){gx+=3;continue;}                 /* space */
-            int width=right-left+1;if(gx+width>95)break;
-            for(int j=0;j<9;j++)for(int i=left;i<=right;i++)if(glyph[index][i]&(1u<<j)){
-                int px=gx+i-left+(pass==0),py=y+j+(pass==0);
+        int gx=x;
+        for(const char *t=text;*t;t++){
+            unsigned char c=(unsigned char)*t&127;
+            if(c==' '){gx+=3;continue;}
+            const Glyph *g=atlasValid&&atlasGlyphs[c].have?&atlasGlyphs[c]:builtinGlyphs[c].have?&builtinGlyphs[c]:&builtinGlyphs['?'];
+            if(!g->have)continue;
+            if(gx+g->width>95)break;
+            for(int cx=0;cx<g->width;cx++)for(int bit=0;bit<11;bit++)if(g->col[cx]&(1u<<bit)){
+                int px=gx+cx+(pass==0),py=y+bit-1+(pass==0);
                 if(px<0||px>=96||py<0||py>=64)continue;
                 if(pass==0){if(!out[py*96+px])out[py*96+px]=2;}else out[py*96+px]=3;
             }
-            gx+=width+1;
+            gx+=g->advance;
         }
     }
 }
@@ -472,6 +644,7 @@ int walkerVisitFrame(const uint8_t *ee,const WalkerVisitReward *reward,
     enum { ENTER,GREETING,PLAY,PRESENT,REWARD };
     enum { NOTE_ART=0x2470,PRESENT_ART=0x1a90,
            GREETING_MESSAGE=43,ONE_NOTE_MESSAGE=48,PRESENT_MESSAGE=49,RECEIVED_MESSAGE=15 };
+    labelSource=ee;
     if(frame>=WALKER_VISIT_FRAME_COUNT || reward->notes<1 || reward->notes>5 ||
        reward->itemIndex>=10 || reward->watts>99)return 0;
     unsigned phase=frame/8, step=frame%8;
@@ -895,6 +1068,7 @@ static void connectRender(const uint8_t *ee,uint8_t *out,const int32_t *s,uint32
     lcdMessage(ee,out,0,LCD_BOX,0,tick,"Connecting...");
 }
 void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],uint32_t ms){
+    labelSource=ee;
     memset(out,0,6144);WalkerInfo i;if(!walkerRead(ee,&i))return;
     unsigned frame=(ms/400)&1;
     if(s[VIEW]==HOME){
@@ -1041,6 +1215,7 @@ int walkerFriendlyTurn(const uint8_t *a,const uint8_t *b,int32_t s[24],unsigned 
 }
 void walkerFriendlyFrame(const uint8_t *a,const uint8_t *b,const int32_t s[24],unsigned side,unsigned selected,uint8_t out[6144],uint32_t ms){
     memset(out,0,6144);if(side>1||selected>3)return;
+    labelSource=side?b:a;
     const uint8_t *own=side?b:a,*peer=side?a:b;unsigned frame=(ms/400)&1,other=side^1;
     char text[16];snprintf(text,sizeof(text),"%.6s",speciesCaps(own[WALKER_ROUTE]|own[WALKER_ROUTE+1]<<8));label(out,text,54,0);
     snprintf(text,sizeof(text),"%.6s",speciesCaps(peer[WALKER_ROUTE]|peer[WALKER_ROUTE+1]<<8));label(out,text,0,0);
