@@ -17,7 +17,6 @@ public final class MainActivity extends Activity {
     private WalkerStore state;
     private LinearLayout panel;
     private TextView stats, appTitle;
-    private LinearLayout countsRow;private long shownPokemon=-1,shownItems=-1;
     private WalkerPicture picture;
     private String page="home";
     private PhonePeerSession peerSession;
@@ -28,7 +27,6 @@ public final class MainActivity extends Activity {
     private long visitStarted;
     private String classicProfile="";
     private boolean classicOnly=true;
-    private boolean roundKeys;
     private int lcdCursor;
     private int pressedImageButton=-1;
     private boolean imageHeld;
@@ -53,9 +51,6 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundColor(0xff0b1a28);
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(16),dp(12),dp(16),dp(20));scroll.addView(root);
         appTitle=text("Pokewalker",27,INK);root.addView(appTitle);picture=new WalkerPicture();root.addView(picture,new LinearLayout.LayoutParams(-1,dp(250)));
-        // Classic mode hides the stats block, so show the walker's own Pokémon and item icons with their counts here.
-        countsRow=new LinearLayout(this);countsRow.setOrientation(LinearLayout.HORIZONTAL);countsRow.setGravity(Gravity.CENTER_HORIZONTAL|Gravity.CENTER_VERTICAL);countsRow.setVisibility(View.GONE);
-        root.addView(countsRow,new LinearLayout.LayoutParams(-1,-2));
         stats=text("",18,MINT);root.addView(stats);
         panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);root.addView(panel);setContentView(scroll);
         // Keep controls clear of gesture navigation, system bars and cutouts.
@@ -92,7 +87,6 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy(){handler.removeCallbacks(redraw);handler.removeCallbacks(classicClock);stopClassicAudio();if(peerSession!=null)peerSession.close();pendingPeerPermission=null;generation++;super.onDestroy();}
     private int dp(float x){return (int)(x*getResources().getDisplayMetrics().density+.5f);}
     private TextView text(String s,int size,int color){TextView v=new TextView(this);v.setText(s);v.setTextSize(size);v.setTextColor(color);v.setPadding(0,dp(5),0,dp(5));return v;}
-    private GradientDrawable box(int fill,int stroke,int radiusDp,int strokeDp){GradientDrawable d=new GradientDrawable();d.setColor(fill);d.setCornerRadius(dp(radiusDp));d.setStroke(dp(strokeDp),stroke);return d;}
     private void heading(String title){appTitle.setVisibility(View.VISIBLE);stats.setVisibility(View.VISIBLE);picture.getLayoutParams().height=dp(page.equals("radar")||page.equals("dowsing")?260:320);picture.requestLayout();panel.removeAllViews();panel.addView(text(title,23,INK));}
     private void note(String message){panel.addView(text(message,17,MUTED));}
     private Button button(String label,Runnable action){
@@ -104,12 +98,6 @@ public final class MainActivity extends Activity {
     }
     private Button patch(LinearLayout row,String label,Runnable action){
         Button b=button(label,action);panel.removeView(b);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(60),1);lp.setMargins(dp(3),dp(4),dp(3),dp(4));
-        if(roundKeys&&label.length()<=2){ // the three physical keys: white domed buttons with a grey rim
-            android.graphics.drawable.StateListDrawable keys=new android.graphics.drawable.StateListDrawable();
-            keys.addState(new int[]{android.R.attr.state_pressed},box(0xffc9c7c0,0xff8a8982,30,3));keys.addState(new int[]{},box(0xfffbfaf7,0xffa9a8a1,30,3));
-            b.setBackground(keys);b.setTextColor(0xff8f8e88);b.setTextSize(22);b.setGravity(Gravity.CENTER);b.setPadding(0,0,0,0);
-            if(label.equals("●"))lp.setMargins(dp(3),dp(0),dp(3),dp(0));
-        }
         row.addView(b,lp);return b;
     }
     private View grassPatch(LinearLayout row,int number,boolean rustling,boolean searched,Runnable action){
@@ -135,35 +123,10 @@ public final class MainActivity extends Activity {
             else {
                 long[] i=Native.info(state.data);
                 String mode=state.revoked?"Session revoked":state.returnPending?"Return pending · phone copy locked":state.mode==2?"Phone pedometer":state.mode==1?"Time-based":"Walking paused";
-                android.text.SpannableStringBuilder text=new android.text.SpannableStringBuilder((i[Native.HAS_POKEMON]!=0?Native.species((int)i[Native.SPECIES])+" · Lv "+i[Native.LEVEL]:"No partner · send a Pokémon from HGSS")+"\n"+i[Native.STROLL]+" steps · "+i[Native.WATTS]+" watts\n"+Native.text(state.data,2)+"\n");
-                // Like the classic home screen: a Poké Ball and a treasure icon, shown only when you hold some, with how many.
-                long[] counts={i[Native.POKEMON_COUNT],i[Native.ITEM_COUNT]};int[] kinds={1,3};boolean any=false;
-                for(int n=0;n<2;n++)if(counts[n]>0){
-                    PixelMenuIcon icon=new PixelMenuIcon(this,kinds[n]);icon.setBounds(0,0,dp(24),dp(24));
-                    int at=text.length();text.append(" ");text.setSpan(new android.text.style.ImageSpan(icon,android.text.style.ImageSpan.ALIGN_BOTTOM),at,at+1,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                    text.append(" "+counts[n]+"    ");any=true;
-                }
-                if(any)text.append("\n");
-                stats.setText(text.append(mode));
+                stats.setText((i[Native.HAS_POKEMON]!=0?Native.species((int)i[Native.SPECIES])+" · Lv "+i[Native.LEVEL]:"No partner · send a Pokémon from HGSS")+"\n"+i[Native.STROLL]+" steps · "+i[Native.WATTS]+" watts\n"+Native.text(state.data,2)+"\nItems: "+packSummary(true)+"\nCaught: "+packSummary(false)+"\n"+mode);
             }
-            updateCounts();
             picture.invalidate();
         }
-    }
-    private void updateCounts(){
-        long pokemon=0,items=0;
-        if(state.data!=null&&!state.returnPending){long[] i=Native.info(state.data);pokemon=i[Native.POKEMON_COUNT];items=i[Native.ITEM_COUNT];}
-        if(pokemon!=shownPokemon||items!=shownItems){
-            shownPokemon=pokemon;shownItems=items;countsRow.removeAllViews();
-            long[] counts={pokemon,items};int[] kinds={1,3};
-            for(int n=0;n<2;n++)if(counts[n]>0){
-                android.widget.ImageView icon=new android.widget.ImageView(this);icon.setImageDrawable(new PixelMenuIcon(this,kinds[n]));
-                icon.setContentDescription(n==0?"Pokémon held":"Items held");
-                countsRow.addView(icon,new LinearLayout.LayoutParams(dp(36),dp(36)));
-                TextView number=text(String.valueOf(counts[n]),24,INK);number.setPadding(dp(8),0,dp(28),0);countsRow.addView(number);
-            }
-        }
-        countsRow.setVisibility(classicOnly&&page.equals("classic")&&countsRow.getChildCount()>0?View.VISIBLE:View.GONE);
     }
     private void stopClassicAudio(){if(classicAudio!=null){classicAudio.release();classicAudio=null;}}
     private void playClassicScore(int score,int volume){
@@ -199,7 +162,7 @@ public final class MainActivity extends Activity {
         picture.getLayoutParams().height=dp(360);picture.requestLayout();
         Switch toggle=new Switch(this);toggle.setText("Classic mode");toggle.setTextColor(INK);toggle.setTextSize(18);toggle.setChecked(classicOnly);
         panel.addView(toggle,new LinearLayout.LayoutParams(-1,dp(56)));
-        toggle.setOnCheckedChangeListener((view,enabled)->{classicOnly=enabled;renderClassicControls();updateCounts();});
+        toggle.setOnCheckedChangeListener((view,enabled)->{classicOnly=enabled;renderClassicControls();});
         if(!classicOnly){
             LinearLayout controls=patchRow();patch(controls,"◀",()->classicPress(0));Button centre=patch(controls,"●",()->classicPress(1));patch(controls,"▶",()->classicPress(2));
             final boolean[] held={false};
@@ -504,9 +467,9 @@ public final class MainActivity extends Activity {
     private void battleScreen(String message){
         page="battle";heading("Wild "+Native.species(Native.command(state.data,9,battle[5])));note(message);note("Your HP: "+battle[0]+" / 4     Wild HP: "+battle[1]+" / 4");
         if(battle[3]!=0&&!battleAnimating){button("Continue",this::home);return;} // the animation already showed the outcome
-        note("◀ Attack     ● Poké Ball     ▶ Evade");roundKeys=true;LinearLayout keys=patchRow();
-        patch(keys,"◀",()->battleAction(0)).setEnabled(!battleAnimating);patch(keys,"●",()->battleAction(2)).setEnabled(!battleAnimating);patch(keys,"▶",()->battleAction(1)).setEnabled(!battleAnimating);
-        roundKeys=false;button("Leave",this::home);
+        LinearLayout keys=patchRow();
+        patch(keys,"◀ Attack",()->battleAction(0)).setEnabled(!battleAnimating);patch(keys,"● Ball",()->battleAction(2)).setEnabled(!battleAnimating);patch(keys,"▶ Evade",()->battleAction(1)).setEnabled(!battleAnimating);
+        button("Leave",this::home);
     }
     private void battleAction(int action){
         if(battleAnimating)return;

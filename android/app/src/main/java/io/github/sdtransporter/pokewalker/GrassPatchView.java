@@ -27,22 +27,21 @@ final class GrassPatchView extends View {
     @Override protected void drawableStateChanged(){super.drawableStateChanged();invalidate();}
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);float w=getWidth(),h=getHeight(),pad=dp(2);
-        paint.setStyle(Paint.Style.FILL);paint.setColor(rustling?0xff232b1d:0xffb4b7aa);
-        canvas.drawRoundRect(pad,pad,w-pad,h-pad,dp(2),dp(2),paint);
-        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(2));paint.setColor(0xff232b1d);canvas.drawRect(pad,pad,w-pad,h-pad,paint);paint.setStyle(Paint.Style.FILL);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(rustling?0xff5e6f3d:0xff17303b);
+        canvas.drawRoundRect(pad,pad,w-pad,h-pad,dp(12),dp(12),paint);
         paint.setAlpha(searched?65:255);
         float sway=rustling?(float)Math.sin(SystemClock.uptimeMillis()/85.0)*dp(3):0;
         float cx=w/2+sway,top=dp(15),height=Math.min(dp(44),h*.44f);
-        triangle(canvas,cx-height*.48f,top+height*.2f,height*.65f,height*.8f,rustling?0xffb4b7aa:0xff555e4c);
-        triangle(canvas,cx+height*.14f,top,height*.8f,height,rustling?0xffb4b7aa:0xff232b1d);
-        triangle(canvas,cx+height*.58f,top+height*.35f,height*.58f,height*.65f,rustling?0xffb4b7aa:0xff555e4c);
-        paint.setAlpha(255);paint.setTextAlign(Paint.Align.CENTER);paint.setTypeface(android.graphics.Typeface.MONOSPACE);paint.setFakeBoldText(true);paint.setTextSize(Math.min(dp(16),w/7.5f));paint.setColor(rustling?0xffb4b7aa:0xff232b1d);
+        triangle(canvas,cx-height*.48f,top+height*.2f,height*.65f,height*.8f,rustling?0xfffcca66:0xff478767);
+        triangle(canvas,cx+height*.14f,top,height*.8f,height,rustling?0xfffcca66:0xff589e73);
+        triangle(canvas,cx+height*.58f,top+height*.35f,height*.58f,height*.65f,rustling?0xfffcca66:0xff478767);
+        paint.setAlpha(255);paint.setTextAlign(Paint.Align.CENTER);paint.setTextSize(Math.min(dp(16),w/7.5f));paint.setColor(0xffe9f6f0);
         canvas.drawText("Patch "+number,w/2,h-dp(23),paint);
-        paint.setTextSize(Math.min(dp(12),w/8f));paint.setColor(rustling?0xffb4b7aa:0xff555e4c);
+        paint.setTextSize(Math.min(dp(12),w/8f));paint.setColor(0xff9ebeb7);
         canvas.drawText(searched?"Searched":rustling?"Rustling!":"Grass",w/2,h-dp(7),paint);
-        if(rustling){paint.setColor(0xffb4b7aa);paint.setTextSize(dp(25));paint.setTextAlign(Paint.Align.RIGHT);canvas.drawText("!!!!".substring(0,Math.min(4,marks)),w-dp(8),dp(30),paint);postInvalidateOnAnimation();}
+        if(rustling){paint.setColor(0xfffcca66);paint.setTextSize(dp(25));paint.setTextAlign(Paint.Align.RIGHT);canvas.drawText("!!!!".substring(0,Math.min(4,marks)),w-dp(8),dp(30),paint);postInvalidateOnAnimation();}
         if(isPressed()||isFocused()) {
-            paint.setColor(rustling?0xffb4b7aa:0xff232b1d);canvas.drawRoundRect(dp(12),h-dp(4),w-dp(12),h-dp(2),dp(1),dp(1),paint);
+            paint.setColor(0xff44ddb3);canvas.drawRoundRect(dp(12),h-dp(4),w-dp(12),h-dp(2),dp(1),dp(1),paint);
         }
     }
 }

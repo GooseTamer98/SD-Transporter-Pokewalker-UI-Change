@@ -1079,8 +1079,10 @@ void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],
         for(unsigned rest=steps;rest>=10;rest/=10)digits++;
         number(ee,out,steps,96-(int)digits*8,48,(int)digits);
         uint16_t rows[16];
-        if(i.pokemonCount){walkerMenuIcon(1,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,x,48+y,3);}
-        if(i.itemCount){walkerMenuIcon(3,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,20+x,48+y,3);}
+        /* Icons for what you are carrying, each with how many, in the walker's own digits (hidden when the step count needs the room). */
+        int counted=digits<=5;int itemX=counted?28:20;
+        if(i.pokemonCount){walkerMenuIcon(1,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,x,48+y,3);if(counted)number(ee,out,i.pokemonCount>9?9:i.pokemonCount,16,48,1);}
+        if(i.itemCount){walkerMenuIcon(3,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,itemX+x,48+y,3);if(counted)number(ee,out,i.itemCount>9?9:i.itemCount,itemX+16,48,1);}
     }else if(s[VIEW]==MENU){
         menuRender(ee,out,s,ms,&i);
     }else if(s[VIEW]==RADAR){
