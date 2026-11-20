@@ -96,6 +96,23 @@ static void text(const uint8_t *p, unsigned n, char *out) {
                    : c >= 0x12b && c <= 0x144 ? 'A' + c - 0x12b
                    : c >= 0x145 && c <= 0x15e ? 'a' + c - 0x145
                    : c == 0x1de               ? ' '
+                   : c == 0x1b2 || c == 0x1b3 ? '\''   /* the curly single quotes (as in Night Sky's Edge) */
+                   : c == 0x1b4 || c == 0x1b5 ? '"'
+                   : c == 0x1ab               ? '!'
+                   : c == 0x1ac               ? '?'
+                   : c == 0x1ad               ? ','
+                   : c == 0x1ae               ? '.'
+                   : c == 0x1b1               ? '/'
+                   : c == 0x1b9               ? '('
+                   : c == 0x1ba               ? ')'
+                   : c == 0x1bd               ? '+'
+                   : c == 0x1be               ? '-'
+                   : c == 0x1bf               ? '*'
+                   : c == 0x1c0               ? '#'
+                   : c == 0x1c1               ? '='
+                   : c == 0x1c2               ? '&'
+                   : c == 0x1c4               ? ':'
+                   : c == 0x1c5               ? ';'
                                               : '?';
     }
     out[j] = 0;

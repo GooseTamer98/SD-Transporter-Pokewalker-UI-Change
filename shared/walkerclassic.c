@@ -65,7 +65,7 @@ enum { B_OPENING,B_ENCOUNTER,B_CHOOSE,B_PLAYER,B_OPPONENT,B_DEFEATED,B_WATTS,B_L
 enum { BATTLE_FRAME_MS=200 };
 enum { MSG_NO_ITEMS=22,MSG_CAPTURED=32,MSG_ESCAPE,MSG_DEFEAT,MSG_ATTACK,MSG_DODGE,MSG_CRITICAL,MSG_HIT,MSG_THROW,MSG_ALMOST,MSG_STARE,MSG_DROPPED };
 enum { SC_CONFIRM=0,SC_BACK=1,SC_MOVE=2,SC_FAILURE=4,SC_SUCCESS=7,SC_HIT=11,SC_DODGE=12,SC_CRITICAL=13,SC_ESCAPE=14,SC_THROW=15 };
-static const uint8_t bLimit[]={6,3,0,8,8,6,8,10,6,6,6,2,3,4,4,6,6,1};
+static const uint8_t bLimit[]={6,3,0,8,8,6,8,10,6,6,4,2,3,4,4,6,6,1};   /* throw: 4 frames (faster than the original's 6) */
 static const int8_t bEntrance[4]={-16,-4,8,8};
 static const int8_t bPlayerTurn[9][2]={{56,8},{56,8},{54,8},{52,8},{53,0},{54,0},{55,4},{56,8},{56,8}};
 static const int8_t bOpponentTurn[9][2]={{56,8},{56,8},{56,10},{56,12},{64,12},{64,11},{64,10},{60,9},{56,8}};
@@ -893,7 +893,7 @@ static void battleRender(const uint8_t *ee,const int32_t *s,uint8_t *out,uint32_
         break;
     case B_THROW:{
         /* The ball flies from your Pokemon to the opponent's spot in a high arc. */
-        float t=(float)(ms-(uint32_t)s[BSTART])/(float)(6*BATTLE_FRAME_MS);if(t>1)t=1;if(t<0)t=0;
+        float t=(float)(ms-(uint32_t)s[BSTART])/(float)(4*BATTLE_FRAME_MS);if(t>1)t=1;if(t<0)t=0;
         float lift=4*t*(1-t);                          /* 0 at both ends, 1 at the midpoint */
         int bx=(int)(44.0f-24.0f*t+0.5f),by=(int)(20.0f-8.0f*t-15.0f*lift+0.5f);
         ballArt(ee,out,bx,by,1);
