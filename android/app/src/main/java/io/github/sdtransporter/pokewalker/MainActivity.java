@@ -687,7 +687,7 @@ public final class MainActivity extends Activity {
             }else{
                 // Poké Ball: throw, absorb, drop, three shakes, then it clicks shut (stars) or bursts open and the Pokémon flees
                 float wx=x+(wild+16)*scale,wy=y+34*scale,gy=y+42*scale,px=x+(player+8)*scale,py=y+30*scale;
-                if(ms<500){ball=true;float p=ms/500f;bx=px+(wx-px)*p;by=py+(wy-py)*p-14*scale*(float)Math.sin(Math.PI*p);}
+                if(ms<500){ball=true;float p=ms/500f;bx=px+(wx-px)*p;by=py+(wy-py)*p-26*scale*(float)Math.sin(Math.PI*p);}
                 else if(ms<1100){ball=true;bx=wx;by=wy+(gy-wy)*Math.max(0,Math.min(1,(ms-800)/300f));}
                 else{ball=true;bx=wx+(ms<2300?3*scale*(float)Math.sin(2*Math.PI*(ms-1100)/400f):0);by=gy;}
                 if(ms>=650&&ms<1900||ms>=650&&caught)showWild=false;else if(ms>=500&&ms<650)showWild=blink;

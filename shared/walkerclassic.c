@@ -591,7 +591,7 @@ static void label(uint8_t *out,const char *text,int x,int y){
             for(int cx=0;cx<g->width;cx++)for(int bit=0;bit<11;bit++)if(g->col[cx]&(1u<<bit)){
                 int px=gx+cx+(pass==0),py=y+bit-1+(pass==0);
                 if(px<0||px>=96||py<0||py>=64)continue;
-                if(pass==0){if(!out[py*96+px])out[py*96+px]=2;}else out[py*96+px]=3;
+                if(pass==0){if(!out[py*96+px])out[py*96+px]=1;}else out[py*96+px]=3;   /* shadow: the light grey shade */
             }
             gx+=g->advance;
         }
@@ -892,9 +892,10 @@ static void battleRender(const uint8_t *ee,const int32_t *s,uint8_t *out,uint32_
         if(f>3){enemyName(ee,out,index,32,LCD_TOP|LCD_LEFT);lcdMessage(ee,out,MSG_ESCAPE,LCD_BOTTOM|LCD_SIDES,1,tick,"It fled!");}
         break;
     case B_THROW:{
-        int step=(int)f<<2;
-        static const int rise[7]={0,1,2,4,5,6,8};
-        int bx=0x2c-step,by=0x14-rise[f>6?6:f];
+        /* The ball flies from your Pokemon to the opponent's spot in a high arc. */
+        float t=(float)(ms-(uint32_t)s[BSTART])/(float)(6*BATTLE_FRAME_MS);if(t>1)t=1;if(t<0)t=0;
+        float lift=4*t*(1-t);                          /* 0 at both ends, 1 at the midpoint */
+        int bx=(int)(44.0f-24.0f*t+0.5f),by=(int)(20.0f-8.0f*t-15.0f*lift+0.5f);
         ballArt(ee,out,bx,by,1);
         lcdMessage(ee,out,MSG_THROW,LCD_BOX,0,tick,"Poke Ball!");
         break;}
@@ -1079,10 +1080,14 @@ void walkerClassicFrame(const uint8_t *ee,const int32_t s[40],uint8_t out[6144],
         for(unsigned rest=steps;rest>=10;rest/=10)digits++;
         number(ee,out,steps,96-(int)digits*8,48,(int)digits);
         uint16_t rows[16];
-        /* Icons for what you are carrying, each with how many, in the walker's own digits (hidden when the step count needs the room). */
-        int counted=digits<=5;int itemX=counted?28:20;
-        if(i.pokemonCount){walkerMenuIcon(1,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,x,48+y,3);if(counted)number(ee,out,i.pokemonCount>9?9:i.pokemonCount,16,48,1);}
-        if(i.itemCount){walkerMenuIcon(3,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,itemX+x,48+y,3);if(counted)number(ee,out,i.itemCount>9?9:i.itemCount,itemX+16,48,1);}
+        /* What you are carrying: the hardware's Poke Ball and generic item icons, each with its count in the walker's digits. */
+        if(hasArtwork(ee,ART_BALL,16)&&hasArtwork(ee,ART_TREASURE,16)){
+            if(i.pokemonCount){raster(ee,out,ART_BALL,0,52,8,8,0);number(ee,out,i.pokemonCount>9?9:i.pokemonCount,8,48,1);}
+            if(i.itemCount){raster(ee,out,ART_TREASURE,20,52,8,8,0);number(ee,out,i.itemCount>9?9:i.itemCount,28,48,1);}
+        }else{
+            if(i.pokemonCount){walkerMenuIcon(1,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,x,48+y,3);}
+            if(i.itemCount){walkerMenuIcon(3,rows);for(int y=0;y<16;y++)for(int x=0;x<16;x++)if(rows[y]&(1u<<x))pixel(out,20+x,48+y,3);}
+        }
     }else if(s[VIEW]==MENU){
         menuRender(ee,out,s,ms,&i);
     }else if(s[VIEW]==RADAR){
