@@ -88,6 +88,7 @@ void walkerClearEncounter(uint8_t *ee) {
 }
 static void text(const uint8_t *p, unsigned n, char *out) {
     unsigned j = 0;
+    unsigned long unknown = 0;   /* positions whose code we could not translate */
     for (unsigned i = 0; i < n; i++) {
         unsigned c = le16(p + i * 2);
         if (!c || c == 0xffff)
@@ -114,8 +115,16 @@ static void text(const uint8_t *p, unsigned n, char *out) {
                    : c == 0x1c4               ? ':'
                    : c == 0x1c5               ? ';'
                                               : '?';
+        if (out[j - 1] == '?' && c != 0x1ac && j <= 32)
+            unknown |= 1ul << (j - 1);
     }
     out[j] = 0;
+    /* An untranslated symbol sitting between two letters is almost always the apostrophe of a name
+     * (Night Sky's Edge, Farfetch'd), whatever character code the game used for it. */
+    for (unsigned k = 1; k + 1 < j; k++)
+        if ((unknown >> k & 1) && ((out[k - 1] | 32) >= 'a' && (out[k - 1] | 32) <= 'z') &&
+            ((out[k + 1] | 32) >= 'a' && (out[k + 1] | 32) <= 'z'))
+            out[k] = '\'';
 }
 unsigned walkerPokemonId(const uint8_t *ee, unsigned slot) {
     return slot < 3 ? le16(ee + WALKER_POKEMON + slot * 16) : 0;
